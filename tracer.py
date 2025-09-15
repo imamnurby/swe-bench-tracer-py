@@ -4,8 +4,9 @@ import ast
 import json
 import pprint
 from collections import defaultdict
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 import copy
+import re
 
 class ExecutionTracer:
     def __init__(self, output_file: str = "trace.jsonl"):
@@ -18,9 +19,11 @@ class ExecutionTracer:
         self.source_cache = {}  # Cache for source file contents
         self.event_id = 0
         
-        
         # Stack of variable dictionaries, one per function call
         self.function_variables_stack = []
+        
+        # Control dependency tracking
+        self.control_stack = []  # Stack of (event_id, indentation_level) for active control statements
         
         # Standard library modules to exclude
         self.stdlib_modules = {
@@ -101,43 +104,133 @@ class ExecutionTracer:
         except (IOError, OSError, UnicodeDecodeError):
             return ""
     
-    # AFTER
-    def get_vars_involved_in_line(self, source_line: str) -> List[str]:
-        """Get all variable names involved in a line using AST"""
-        vars_involved = set()
+    def get_indentation_level(self, source_line: str) -> int:
+        """Get the indentation level of a line"""
+        return len(source_line) - len(source_line.lstrip())
+    
+    def is_control_statement(self, source_line: str) -> bool:
+        """Check if a line is a control flow statement"""
+        stripped = source_line.strip()
+        if not stripped.endswith(':'):
+            return False
+        
+        # Check for control flow keywords
+        control_keywords = ['if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'with']
+        first_word = stripped.split()[0] if stripped.split() else ""
+        return first_word in control_keywords
+    
+    def is_block_continuation(self, source_line: str) -> bool:
+        """Check if a line continues a control block (elif, else, except, finally)"""
+        stripped = source_line.strip()
+        if not stripped.endswith(':'):
+            return False
+        
+        continuation_keywords = ['elif', 'else', 'except', 'finally']
+        first_word = stripped.split()[0] if stripped.split() else ""
+        return first_word in continuation_keywords
+    
+    def update_control_stack(self, source_line: str, current_indentation: int, current_event_id: int):
+        """Update the control stack based on current line"""
+        # Remove control statements that are no longer active
+        # (when we encounter a line with indentation <= control statement's indentation)
+        while self.control_stack:
+            control_event_id, control_indentation = self.control_stack[-1]
+            
+            # Special case: if current line is a block continuation (elif, else, etc.)
+            # it should be at the same level as the original if/try
+            if self.is_block_continuation(source_line):
+                if current_indentation == control_indentation:
+                    # Replace the last control statement with this continuation
+                    self.control_stack[-1] = (current_event_id, current_indentation)
+                    break
+                elif current_indentation < control_indentation:
+                    self.control_stack.pop()
+                else:
+                    break
+            else:
+                # Normal case: if current indentation <= control indentation, pop
+                if current_indentation <= control_indentation:
+                    self.control_stack.pop()
+                else:
+                    break
+        
+        # If current line is a control statement, add it to stack
+        if self.is_control_statement(source_line):
+            self.control_stack.append((current_event_id, current_indentation))
+    
+    def get_current_control_dependencies(self) -> List[int]:
+        """Get the current control dependencies (event IDs)"""
+        return [event_id for event_id, _ in self.control_stack]
+    
+    def analyze_variable_usage(self, source_line: str) -> Tuple[List[str], List[str]]:
+        """Analyze which variables are defined vs used in a line using AST"""
+        vars_defined = set()
+        vars_used = set()
         stripped_line = source_line.strip()
 
         if not stripped_line:
-            return []
+            return [], []
 
-        # --- Start of new logic ---
-        # Heuristic: If a line ends with a colon, it's likely an incomplete
-        # compound statement (if, for, def, etc.). We append 'pass' to make it
-        # syntactically valid for ast.parse.
+        # Use the existing clever trick for compound statements
         code_to_parse = stripped_line
         if stripped_line.endswith(':'):
             code_to_parse += "\n    pass"
-        # --- End of new logic ---
 
         try:
-            # We now only need to parse in 'exec' mode, as it handles both
-            # simple statements and the compound ones we've just fixed.
             tree = ast.parse(code_to_parse, mode='exec')
             
-            # Extract all variable names from the AST
             for node in ast.walk(tree):
                 if isinstance(node, ast.Name):
-                    # We should only care about variables being loaded (used),
-                    # not stored (assigned) or deleted, but for simplicity,
-                    # we'll still grab all names.
-                    vars_involved.add(node.id)
+                    if isinstance(node.ctx, ast.Store):
+                        # Variable is being assigned to
+                        vars_defined.add(node.id)
+                    elif isinstance(node.ctx, ast.Load):
+                        # Variable is being read from
+                        vars_used.add(node.id)
+                    # Note: ast.Del context exists but is rare (del statement)
+                
+                # Handle special cases like for loops where loop variable is defined
+                elif isinstance(node, ast.For):
+                    # The target of a for loop is considered defined
+                    if isinstance(node.target, ast.Name):
+                        vars_defined.add(node.target.id)
+                    # The iter part uses variables
+                    for child in ast.walk(node.iter):
+                        if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load):
+                            vars_used.add(child.id)
+                
+                # Handle list comprehensions, which can define variables
+                elif isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+                    for generator in node.generators:
+                        if isinstance(generator.target, ast.Name):
+                            vars_defined.add(generator.target.id)
+                
+                # Handle function definitions
+                elif isinstance(node, ast.FunctionDef):
+                    vars_defined.add(node.name)
+                
+                # Handle class definitions  
+                elif isinstance(node, ast.ClassDef):
+                    vars_defined.add(node.name)
+                
+                # Handle import statements
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        name = alias.asname if alias.asname else alias.name
+                        vars_defined.add(name)
+                
+                elif isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        name = alias.asname if alias.asname else alias.name
+                        vars_defined.add(name)
                         
         except SyntaxError:
-            # If our heuristic fails and the code is still invalid,
-            # we fall back to returning an empty list.
-            pass
+            # If parsing fails, fall back to the original simple approach
+            for node in ast.walk(ast.parse(code_to_parse, mode='exec')):
+                if isinstance(node, ast.Name):
+                    vars_used.add(node.id)
         
-        return list(vars_involved)
+        return list(vars_defined), list(vars_used)
     
     def serialize_value(self, value: Any) -> Any:
         """Serialize a value for JSON output"""
@@ -271,6 +364,9 @@ class ExecutionTracer:
             func_vars = dict(parameters)
             self.function_variables_stack.append(func_vars)
             
+            # Reset control stack for new function
+            self.control_stack = []
+            
             # Record the relationship for call graph
             if self.call_stack:
                 caller_info = self.call_stack[-1]
@@ -297,6 +393,9 @@ class ExecutionTracer:
                 if self.function_variables_stack:
                     self.function_variables_stack.pop()
                 
+                # Reset control stack when exiting function
+                self.control_stack = []
+                
                 # Add return trace
                 self.add_trace_entry(
                     'Return',
@@ -306,21 +405,30 @@ class ExecutionTracer:
                 
         elif event == 'line':
             # First, update function variables based on current frame state
-            # This captures any variables assigned by the previous line
             self.update_function_variables(frame)
             
-            # Get source line and variables involved
+            # Get source line and analyze variables
             source_line = self.get_source_line(frame.f_code.co_filename, frame.f_lineno)
-            vars_involved = self.get_vars_involved_in_line(source_line)
+            vars_defined, vars_used = self.analyze_variable_usage(source_line)
             
-            # Get current seen variables (after updating from previous line)
+            # Update control stack based on current line
+            current_indentation = self.get_indentation_level(source_line)
+            current_event_id = self.event_id  # This will be the event_id for this line
+            self.update_control_stack(source_line, current_indentation, current_event_id)
+            
+            # Get current control dependencies
+            control_dependencies = self.get_current_control_dependencies()
+            
+            # Get current seen variables
             seen_variables = self.get_current_seen_variables()
             
-            # Add line execution trace
+            # Add line execution trace with enhanced information
             self.add_trace_entry(
                 'Line',
                 frame,
-                vars_involved=vars_involved,
+                vars_defined=vars_defined,
+                vars_used=vars_used,
+                control_dependencies=control_dependencies,
                 seen_variables=seen_variables
             )
                 
@@ -366,8 +474,8 @@ class ExecutionTracer:
             'max_call_depth': self.max_depth,
             'unique_functions': len(self.call_graph),
             'output_file': self.output_file,
-            'call_graph': dict(self.call_graph),  # Add this
-            'call_counts': dict(self.call_counts)  # And this
+            'call_graph': dict(self.call_graph),
+            'call_counts': dict(self.call_counts)
         }
         
 # ==============================================================================
@@ -391,7 +499,11 @@ def format_output(processed_item):
 def process_item(item, index):
     """Processes a single item from the list."""
     print(f"  Processing item {index}: {item}")
-    upper_item = item.upper()
+    if (item == "banana"):
+        if item != "apple":
+            upper_item = item
+    else:
+        upper_item = item.upper()
     item_len = len(upper_item)
     
     # Pass a tuple to the next function
