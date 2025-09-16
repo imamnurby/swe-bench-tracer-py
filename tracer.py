@@ -63,13 +63,21 @@ class ExecutionTracer:
     def _get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
         """Return separate lists of variables defined and used in the statement."""
         defined, used = set(), set()
-        stripped = source_line.strip()
+        if not source_line or not source_line.strip():
+            return [], []
+
+        # Remove comments safely so colon-trick and AST parsing work
+        code_no_comments = self._strip_comments_preserving_strings(source_line).rstrip()
+        # Keep a final fallback to the original stripped form
+        stripped = code_no_comments.strip()
         if not stripped:
             return [], []
 
         code_to_parse = stripped
+        # If the logical code (without comments) ends with a colon, make it parseable
         if stripped.endswith(':'):
             code_to_parse += "\n    pass"
+
         try:
             tree = ast.parse(code_to_parse, mode="exec")
             for node in ast.walk(tree):
@@ -79,8 +87,9 @@ class ExecutionTracer:
                     elif isinstance(node.ctx, ast.Load):
                         used.add(node.id)
         except SyntaxError:
-            # best-effort only; if parsing fails, return empty lists
+            # best-effort only
             pass
+
         return list(defined), list(used)
 
     def _line_indent(self, source_line: str) -> int:
@@ -140,20 +149,25 @@ class ExecutionTracer:
         except (IOError, OSError, UnicodeDecodeError):
             return ""
         
-    def _strip_comment(self, line: str) -> str:
+    def _strip_comments_preserving_strings(self, line: str) -> str:
         """
-        Return the line without any trailing comment.
-        Uses tokenize to avoid removing # that might be inside strings.
+        Remove inline comments from a single source line while preserving
+        '#' inside string literals. Uses tokenize to avoid breaking strings.
+        Returns a best-effort comment-free source line.
         """
-        out = []
         try:
-            for tok_type, tok_str, *_ in tokenize.generate_tokens(io.StringIO(line).readline):
-                if tok_type == tokenize.COMMENT:
-                    break
-                out.append(tok_str)
-        except tokenize.TokenError:
-            return line
-        return ''.join(out)
+            tokens = []
+            # generate_tokens yields namedtuple with .type and .string in Python 3
+            for tok in tokenize.generate_tokens(io.StringIO(line).readline):
+                # Skip comment tokens
+                if tok.type == tokenize.COMMENT:
+                    continue
+                tokens.append((tok.type, tok.string))
+            # Reconstruct source without comment tokens
+            return tokenize.untokenize(tokens)
+        except Exception:
+            # Fallback: naive split but only if tokenize failed
+            return line.split('#', 1)[0]
 
 
     def _serialize_value(self, value: Any) -> Any:
@@ -343,22 +357,27 @@ class ExecutionTracer:
                     # include the positive id by default.
                     control_deps.append(eid)
 
-            # Decide whether this line starts a control header (if/elif/for/while/with/try/except/finally)
-            m = re.match(r'^(if|elif|for|while|with|try|except|finally)\b', stripped)
+                        # Use a comment-free version for parsing/eval (but keep indent based on original)
+            line_no_comments = self._strip_comments_preserving_strings(source_line)
+            stripped_no_comments = line_no_comments.strip()
+
+            # For AST, var-use detection etc already uses get_vars_defined_and_used -> which uses stripped_no_comments
+
+            # When deciding if this line is a control header, use stripped_no_comments
+            m = re.match(r'^(if|elif|for|while|with|try|except|finally)\b', stripped_no_comments)
             if m:
                 keyword = m.group(1)
-                # Capture current event id (the id that add_trace_entry will assign to this Line)
+
+                # capture event id to push later
                 current_event_id = self.event_id
 
-                # Evaluate condition truth for condition-bearing constructs where possible
                 truth_value = None
                 try:
                     if keyword in ('if', 'elif', 'while'):
-                        # Extract the expression between keyword and trailing ':'.
-                        cond_m = re.match(r'^(?:if|elif|while)\s+(.*):\s*$', stripped)
+                        cond_m = re.match(r'^(?:if|elif|while)\s+(.*):\s*$', stripped_no_comments)
                         if cond_m:
                             cond_text = cond_m.group(1)
-                            # Safe-ish runtime evaluation using the traced frame's context
+                            # cond_text has had comments removed, so eval won't be broken by inline comments
                             try:
                                 cond_eval = eval(compile(cond_text, '<cond>', 'eval'),
                                                 frame.f_globals, frame.f_locals)
@@ -368,29 +387,26 @@ class ExecutionTracer:
                         else:
                             truth_value = False
                     elif keyword == 'for':
-                        # Try to evaluate the iterable part after 'in'
-                        for_m = re.match(r'^for\s+.*\s+in\s+(.*):\s*$', stripped)
+                        # extract iterable after 'in' using stripped_no_comments
+                        for_m = re.match(r'^for\s+.*\s+in\s+(.*):\s*$', stripped_no_comments)
                         if for_m:
                             iterable_text = for_m.group(1)
                             try:
                                 iterable_val = eval(compile(iterable_text, '<iter>', 'eval'),
                                                     frame.f_globals, frame.f_locals)
-                                # best-effort: check truthiness (note: may mis-handle generators)
                                 truth_value = bool(iterable_val)
                             except Exception:
                                 truth_value = False
                         else:
                             truth_value = False
                     elif keyword == 'with':
-                        # not meaningful as boolean; mark as True (acts as a control boundary)
                         truth_value = True
                     elif keyword in ('try', 'except', 'finally'):
-                        # Per spec: treat try/except/finally as normal blocks for slicing
                         truth_value = True
                 except Exception:
                     truth_value = False
 
-                # Add the Line event for this control header (the control_deps computed above apply).
+                # Add the Line event (control_deps computed from current control_stack)
                 seen_variables = self._get_current_seen_variables()
                 self._add_trace_entry(
                     'Line',
@@ -401,8 +417,7 @@ class ExecutionTracer:
                     seen_variables=seen_variables
                 )
 
-                # Push control entry (so body lines inside this header see it).
-                # We push the event id that was assigned to this Line (captured earlier).
+                # Now push the control entry using the event id assigned above
                 self.control_stack.append({
                     'indent': indent,
                     'id': current_event_id,
