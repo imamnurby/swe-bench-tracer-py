@@ -70,3 +70,54 @@ def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
         current_id -= 1
 
     return slice_result
+
+
+
+
+
+
+import json
+
+def read_trace_from_jsonl(jsonl_path: str) -> list:
+    """
+    Reads an execution trace from a .jsonl file.
+    Each line in the file should be a JSON object representing one event.
+
+    Args:
+        jsonl_path: Path to the .jsonl file.
+
+    Returns:
+        List of event dictionaries.
+    """
+    trace = []
+    with open(jsonl_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line:  # Skip empty lines
+                event = json.loads(line)
+                trace.append(event)
+    return trace
+
+
+def main():
+    # --- CONFIGURE THESE VALUES ---
+    jsonl_file_path = "/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/demonstration_trace.jsonl"      # Path to your .jsonl trace file
+    start_event_id = 10                  # Example: event ID where error was observed
+    target_var = "y"                     # Example: variable of interest
+
+    # --- READ TRACE ---
+    trace = read_trace_from_jsonl(jsonl_file_path)
+
+    # --- PERFORM BACKWARD SLICING ---
+    slice_result = backward_slice(trace, start_event_id, target_var)
+
+    # --- OUTPUT RESULT ---
+    print(f"Backward slice contains {len(slice_result)} events:")
+    for event in slice_result:
+        print(event)
+
+
+# Assuming backward_slice is defined above or imported.
+# If running as script, uncomment the line below:
+if __name__ == "__main__":
+    main()
