@@ -21,6 +21,7 @@ class ExecutionTracer:
         self.source_cache = {}  # Cache for source file contents
         self.event_id = 0
         self.control_stack = []
+        self.inherited_control_stack = []
         
         
         # Stack of variable dictionaries, one per function call
@@ -291,6 +292,13 @@ class ExecutionTracer:
             return self._trace_function
 
         if event == 'call':
+            caller_snapshot = []
+            # include caller's local controls
+            caller_snapshot.extend([dict(e) for e in self.control_stack])
+            # include everything caller already inherited
+            if self.inherited_control_stack:
+                caller_snapshot.extend([dict(e) for e in self.inherited_control_stack[-1]])
+            self.inherited_control_stack.append(caller_snapshot)
             self.control_stack = []  # reset on new function entry
             # --- existing call handling unchanged ---
             current_depth = len(self.call_stack)
@@ -305,7 +313,15 @@ class ExecutionTracer:
                 self.call_graph[caller_name].add(callee_name)
                 self.call_counts[(caller_name, callee_name)] += 1
             self.call_stack.append(func_info)
-            self._add_trace_entry('Function', frame, parameters=parameters)
+            self._add_trace_entry(
+                'Function',
+                frame,
+                parameters=parameters,
+                inherited_control_dependencies=[
+                    e['id'] if e.get('truth') is not False else -e['id']
+                    for e in caller_snapshot
+                ]
+            )
 
         elif event == 'return':
             self.control_stack = []  # reset when leaving function
@@ -313,6 +329,8 @@ class ExecutionTracer:
                 self.call_stack.pop()
                 if self.function_variables_stack:
                     self.function_variables_stack.pop()
+                if self.inherited_control_stack:
+                    self.inherited_control_stack.pop()
                 self._add_trace_entry('Return', frame, return_value=self._serialize_value(arg))
 
         elif event == 'line':
@@ -356,6 +374,18 @@ class ExecutionTracer:
                     # For constructs where we don't/easily evaluate a truth value (e.g. a 'with'),
                     # include the positive id by default.
                     control_deps.append(eid)
+            
+            inherited_ids = []
+            if self.inherited_control_stack:
+                for e in self.inherited_control_stack[-1]:
+                    tid = e.get('id')
+                    ttruth = e.get('truth')
+                    if ttruth is True:
+                        inherited_ids.append(tid)
+                    elif ttruth is False:
+                        inherited_ids.append(-tid)
+                    else:
+                        inherited_ids.append(tid)
 
                         # Use a comment-free version for parsing/eval (but keep indent based on original)
             line_no_comments = self._strip_comments_preserving_strings(source_line)
@@ -414,6 +444,7 @@ class ExecutionTracer:
                     vars_defined=vars_defined,
                     vars_used=vars_used,
                     control_dependencies=control_deps,
+                    inherited_control_dependencies=inherited_ids,
                     seen_variables=seen_variables
                 )
 
@@ -433,6 +464,7 @@ class ExecutionTracer:
                     vars_defined=vars_defined,
                     vars_used=vars_used,
                     control_dependencies=control_deps,
+                    inherited_control_dependencies=inherited_ids,
                     seen_variables=seen_variables
                 )
 
@@ -482,7 +514,7 @@ class ExecutionTracer:
 
 def A():
     print("[A] Starting function A")
-    x = 10
+    x = 50
     print(f"[A] Assigned x = {x}")
     if x > 5:
         print("[A] Condition true: calling B(x)")
