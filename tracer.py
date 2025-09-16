@@ -478,6 +478,90 @@ class ExecutionTracer:
             'call_graph': dict(self.call_graph),  # Add this
             'call_counts': dict(self.call_counts)  # And this
         }
+
+
+def A():
+    print("[A] Starting function A")
+    x = 10
+    print(f"[A] Assigned x = {x}")
+    if x > 5:
+        print("[A] Condition true: calling B(x)")
+        B(x)  # ← DATA DEPENDENCY: x passed to B
+    else:
+        print("[A] Condition false: calling C(x)")
+        C(x)  # ← CONTROL + DATA DEPENDENCY (not taken here)
+
+
+def B(x):
+    print(f"[B] Starting function B with x = {x}")
+    y = x + 1
+    print(f"[B] Computed y = {y} from x")
+    D(y)  # ← DATA DEPENDENCY: y passed to D
+
+
+def C(x):
+    print(f"[C] Function C called with x = {x} (not executed in this trace)")
+    # Not called in this scenario — included for completeness
+
+
+def D(y):
+    print(f"[D] Starting function D with y = {y}")
+    z = y * 2
+    print(f"[D] Computed z = {z} from y")
+    if z < 50:
+        print("[D] Condition true: calling E(z)")
+        E(z)  # ← CONTROL + DATA DEPENDENCY
+    else:
+        print("[D] Condition false: calling F(z)")
+        F(z)  # ← Not taken in this trace
+
+
+def E(z):
+    print(f"[E] Starting function E with z = {z}")
+    result = z - 10
+    print(f"[E] Computed result = {result} ← ERROR OBSERVED HERE!")
+    # Simulate error detection
+    if result == 12:
+        print("[E] ✅ Expected result")
+    else:
+        print("[E] ❌ Unexpected result — this is where you’d raise an error in real debugging")
+
+
+def F(z):
+    print(f"[F] Function F called with z = {z} (not executed in this trace)")
+    
+if __name__ == "__main__":
+    print(">>> Executing actual functions:")
+    
+    tracer = ExecutionTracer(output_file="demonstration_trace.jsonl")
+    
+    # 2. Start tracing
+    print("\nStarting tracer...")
+    tracer.start_tracing()
+    
+    # 3. Run the target code
+    # Using a try/finally block ensures tracing is stopped even if an error occurs
+    try:
+        A()
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        # 4. Stop tracing
+        print("\nStopping tracer...")
+        tracer.stop_tracing()
+        
+    # 5. Save the collected trace data to the file
+    tracer.save_trace()
+    
+    # 6. Print a summary of the trace to the console
+    print("\n--- Trace Summary ---")
+    summary = tracer.get_trace_summary()
+    pprint.pprint(summary)
+    
+    print("\n--- Next Steps ---")
+    print("Check the 'demonstration_trace.jsonl' file to see the detailed execution trace.")
+    print("Each line in the file is a JSON object representing an event (Function call, Line execution, Return).")
+    
         
 # # ==============================================================================
 # #  Demonstration Code
@@ -568,140 +652,140 @@ class ExecutionTracer:
 #     print("Each line in the file is a JSON object representing an event (Function call, Line execution, Return).")
     
     
-def test_simple_if_else(x):
-    """Test Case 1: Simple if-else"""
-    if x > 5:                    
-        result = "big"           
-    else:                        
-        result = "small"         
-    return result
+# def test_simple_if_else(x):
+#     """Test Case 1: Simple if-else"""
+#     if x > 5:                    
+#         result = "big"           
+#     else:                        
+#         result = "small"         
+#     return result
 
-def test_elif_chain(x):
-    """Test Case 2: elif chain (same level)"""
-    if x < 0:                    
-        result = "negative"      
-    elif x == 0:                 
-        result = "zero"          
-    else:                        
-        result = "positive"     
-    return result
+# def test_elif_chain(x):
+#     """Test Case 2: elif chain (same level)"""
+#     if x < 0:                    
+#         result = "negative"      
+#     elif x == 0:                 
+#         result = "zero"          
+#     else:                        
+#         result = "positive"     
+#     return result
 
-def test_nested_if(x, y):
-    """Test Case 3: Nested if statements (different levels)"""
-    if x > 0:                    
-        if y > 0:                
-            result = "both positive"  
-        else:                    
-            result = "x pos, y neg"   
-    else:                        
-        result = "x negative"    
-    return result
+# def test_nested_if(x, y):
+#     """Test Case 3: Nested if statements (different levels)"""
+#     if x > 0:                    
+#         if y > 0:                
+#             result = "both positive"  
+#         else:                    
+#             result = "x pos, y neg"   
+#     else:                        
+#         result = "x negative"    
+#     return result
 
-def test_mixed_nested_elif(x, y):
-    """Test Case 4: Mixed nested and elif"""
-    if x > 10:                   
-        if y > 5:                
-            result = "both big"  
-        else:                    
-            result = "x big, y small"  
-    elif x > 0:                  
-        result = "x medium"      
-    else:                        
-        result = "x small"       
-    return result
+# def test_mixed_nested_elif(x, y):
+#     """Test Case 4: Mixed nested and elif"""
+#     if x > 10:                   
+#         if y > 5:                
+#             result = "both big"  
+#         else:                    
+#             result = "x big, y small"  
+#     elif x > 0:                  
+#         result = "x medium"      
+#     else:                        
+#         result = "x small"       
+#     return result
 
-def test_sequential_ifs(x, y):
-    """Test Case 5: Sequential independent if statements"""
-    result = []
+# def test_sequential_ifs(x, y):
+#     """Test Case 5: Sequential independent if statements"""
+#     result = []
     
-    if x > 0:                    # Event A
-        result.append("x positive")  # Event B: control_dependencies=[A]
-    else:                        # (not traced)
-        result.append("x non-positive")  # Event C: control_dependencies=[-A]
+#     if x > 0:                    # Event A
+#         result.append("x positive")  # Event B: control_dependencies=[A]
+#     else:                        # (not traced)
+#         result.append("x non-positive")  # Event C: control_dependencies=[-A]
     
-    if y > 0:                    # Event D: control_dependencies=[] (independent)
-        result.append("y positive")  # Event E: control_dependencies=[D]
-    else:                        # (not traced)
-        result.append("y non-positive")  # Event F: control_dependencies=[-D]
+#     if y > 0:                    # Event D: control_dependencies=[] (independent)
+#         result.append("y positive")  # Event E: control_dependencies=[D]
+#     else:                        # (not traced)
+#         result.append("y non-positive")  # Event F: control_dependencies=[-D]
     
-    return result
+#     return result
 
-def test_complex_nesting(a, b, c):
-    """Test Case 6: Complex nesting with multiple levels"""
-    if a > 0:                    # Event A
-        if b > 0:                # Event B: control_dependencies=[A]
-            if c > 0:            # Event C: control_dependencies=[A, B]
-                result = "all positive"      # Event D: control_dependencies=[A, B, C]
-            else:                # (not traced)
-                result = "a,b pos, c neg"    # Event E: control_dependencies=[A, B, -C]
-        elif b == 0:             # Event F: control_dependencies=[A, -B, F]
-            result = "a pos, b zero"         # Event G: control_dependencies=[A, -B, F]
-        else:                    # (not traced)
-            result = "a pos, b neg"          # Event H: control_dependencies=[A, -B, -F]
-    else:                        # (not traced)
-        result = "a not positive"            # Event I: control_dependencies=[-A]
-    return result
+# def test_complex_nesting(a, b, c):
+#     """Test Case 6: Complex nesting with multiple levels"""
+#     if a > 0:                    # Event A
+#         if b > 0:                # Event B: control_dependencies=[A]
+#             if c > 0:            # Event C: control_dependencies=[A, B]
+#                 result = "all positive"      # Event D: control_dependencies=[A, B, C]
+#             else:                # (not traced)
+#                 result = "a,b pos, c neg"    # Event E: control_dependencies=[A, B, -C]
+#         elif b == 0:             # Event F: control_dependencies=[A, -B, F]
+#             result = "a pos, b zero"         # Event G: control_dependencies=[A, -B, F]
+#         else:                    # (not traced)
+#             result = "a pos, b neg"          # Event H: control_dependencies=[A, -B, -F]
+#     else:                        # (not traced)
+#         result = "a not positive"            # Event I: control_dependencies=[-A]
+#     return result
 
-if __name__ == "__main__":
-    print("--- ExecutionTracer Demonstration ---")
+# if __name__ == "__main__":
+#     print("--- ExecutionTracer Demonstration ---")
     
-    # 1. Initialize the tracer, saving the output to a specific file
-    tracer = ExecutionTracer(output_file="demonstration_trace.jsonl")
+#     # 1. Initialize the tracer, saving the output to a specific file
+#     tracer = ExecutionTracer(output_file="demonstration_trace.jsonl")
     
-    # 2. Start tracing
-    print("\nStarting tracer...")
-    tracer.start_tracing()
+#     # 2. Start tracing
+#     print("\nStarting tracer...")
+#     tracer.start_tracing()
     
-    # 3. Run the target code
-    # Using a try/finally block ensures tracing is stopped even if an error occurs
-    try:
-        # Test Case 1: Simple If-Else
-        test_simple_if_else(10)
-        test_simple_if_else(3)
+#     # 3. Run the target code
+#     # Using a try/finally block ensures tracing is stopped even if an error occurs
+#     try:
+#         # Test Case 1: Simple If-Else
+#         test_simple_if_else(10)
+#         test_simple_if_else(3)
 
-        # Test Case 2: elif chain
-        test_elif_chain(-5)
-        test_elif_chain(0)
-        test_elif_chain(5)
+#         # Test Case 2: elif chain
+#         test_elif_chain(-5)
+#         test_elif_chain(0)
+#         test_elif_chain(5)
 
-        # Test Case 3: Nested if
-        test_nested_if(5, 3)
-        test_nested_if(5, -3)
-        test_nested_if(-5, 3)
+#         # Test Case 3: Nested if
+#         test_nested_if(5, 3)
+#         test_nested_if(5, -3)
+#         test_nested_if(-5, 3)
 
-        # Test Case 4: Mixed nested and elif
-        test_mixed_nested_elif(15, 10)
-        test_mixed_nested_elif(15, 2)
-        test_mixed_nested_elif(5, 10)
-        test_mixed_nested_elif(-5, 10)
+#         # Test Case 4: Mixed nested and elif
+#         test_mixed_nested_elif(15, 10)
+#         test_mixed_nested_elif(15, 2)
+#         test_mixed_nested_elif(5, 10)
+#         test_mixed_nested_elif(-5, 10)
 
-        # Test Case 5: Sequential independent ifs
-        test_sequential_ifs(5, 3)
-        test_sequential_ifs(5, -3)
-        test_sequential_ifs(-5, 3)
-        test_sequential_ifs(-5, -3)
+#         # Test Case 5: Sequential independent ifs
+#         test_sequential_ifs(5, 3)
+#         test_sequential_ifs(5, -3)
+#         test_sequential_ifs(-5, 3)
+#         test_sequential_ifs(-5, -3)
 
-        # Test Case 6: Complex nesting
-        test_complex_nesting(1, 1, 1)
-        test_complex_nesting(1, 1, -1)
-        test_complex_nesting(1, 0, 1)
-        test_complex_nesting(1, -1, 1)
-        test_complex_nesting(-1, 1, 1)
-    except Exception as e:
-        print(f"An error occurred: {e}")
-    finally:
-        # 4. Stop tracing
-        print("\nStopping tracer...")
-        tracer.stop_tracing()
+#         # Test Case 6: Complex nesting
+#         test_complex_nesting(1, 1, 1)
+#         test_complex_nesting(1, 1, -1)
+#         test_complex_nesting(1, 0, 1)
+#         test_complex_nesting(1, -1, 1)
+#         test_complex_nesting(-1, 1, 1)
+#     except Exception as e:
+#         print(f"An error occurred: {e}")
+#     finally:
+#         # 4. Stop tracing
+#         print("\nStopping tracer...")
+#         tracer.stop_tracing()
         
-    # 5. Save the collected trace data to the file
-    tracer.save_trace()
+#     # 5. Save the collected trace data to the file
+#     tracer.save_trace()
     
-    # 6. Print a summary of the trace to the console
-    print("\n--- Trace Summary ---")
-    summary = tracer.get_trace_summary()
-    pprint.pprint(summary)
+#     # 6. Print a summary of the trace to the console
+#     print("\n--- Trace Summary ---")
+#     summary = tracer.get_trace_summary()
+#     pprint.pprint(summary)
     
-    print("\n--- Next Steps ---")
-    print("Check the 'demonstration_trace.jsonl' file to see the detailed execution trace.")
-    print("Each line in the file is a JSON object representing an event (Function call, Line execution, Return).")
+#     print("\n--- Next Steps ---")
+#     print("Check the 'demonstration_trace.jsonl' file to see the detailed execution trace.")
+#     print("Each line in the file is a JSON object representing an event (Function call, Line execution, Return).")
