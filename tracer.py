@@ -60,12 +60,7 @@ class ExecutionTracer:
             'xml', 'xmlrpc', 'zipapp', 'zipfile', 'zipimport', 'zoneinfo'
         }
     
-    def _line_indent(self, source_line: str) -> int:
-        """Return leading-space indentation level (count of spaces)."""
-        # NOTE: keeps it simple (spaces). If you use tabs, adapt accordingly.
-        return len(source_line) - len(source_line.lstrip(' '))
-
-    def get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
+    def _get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
         """Return separate lists of variables defined and used in the statement."""
         defined, used = set(), set()
         stripped = source_line.strip()
@@ -100,7 +95,7 @@ class ExecutionTracer:
         )
         return line.strip().startswith(keywords)
     
-    def is_stdlib_call(self, filename):
+    def _is_stdlib_call(self, filename):
         """Check if the call is from a standard library module"""
         if not filename:
             return False
@@ -132,7 +127,7 @@ class ExecutionTracer:
                 
         return False
         
-    def get_source_line(self, filename: str, line_no: int) -> str:
+    def _get_source_line(self, filename: str, line_no: int) -> str:
         """Get the source code line from a file"""
         try:
             if filename not in self.source_cache:
@@ -144,6 +139,7 @@ class ExecutionTracer:
             return ""
         except (IOError, OSError, UnicodeDecodeError):
             return ""
+        
     def _strip_comment(self, line: str) -> str:
         """
         Return the line without any trailing comment.
@@ -159,45 +155,8 @@ class ExecutionTracer:
             return line
         return ''.join(out)
 
-    # AFTER
-    def get_vars_involved_in_line(self, source_line: str) -> List[str]:
-        """Get all variable names involved in a line using AST"""
-        vars_involved = set()
-        stripped_line = source_line.strip()
 
-        if not stripped_line:
-            return []
-
-        # --- Start of new logic ---
-        # Heuristic: If a line ends with a colon, it's likely an incomplete
-        # compound statement (if, for, def, etc.). We append 'pass' to make it
-        # syntactically valid for ast.parse.
-        code_to_parse = stripped_line
-        if stripped_line.endswith(':'):
-            code_to_parse += "\n    pass"
-        # --- End of new logic ---
-
-        try:
-            # We now only need to parse in 'exec' mode, as it handles both
-            # simple statements and the compound ones we've just fixed.
-            tree = ast.parse(code_to_parse, mode='exec')
-            
-            # Extract all variable names from the AST
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Name):
-                    # We should only care about variables being loaded (used),
-                    # not stored (assigned) or deleted, but for simplicity,
-                    # we'll still grab all names.
-                    vars_involved.add(node.id)
-                        
-        except SyntaxError:
-            # If our heuristic fails and the code is still invalid,
-            # we fall back to returning an empty list.
-            pass
-        
-        return list(vars_involved)
-    
-    def serialize_value(self, value: Any) -> Any:
+    def _serialize_value(self, value: Any) -> Any:
         """Serialize a value for JSON output"""
         try:
             # Try JSON serialization first
@@ -207,7 +166,7 @@ class ExecutionTracer:
             # Fall back to string representation
             return f"<non-serializable: {type(value).__name__}>"
     
-    def get_function_parameters(self, frame) -> Dict[str, Any]:
+    def _get_function_parameters(self, frame) -> Dict[str, Any]:
         """Extract function parameters and their values"""
         code = frame.f_code
         param_names = code.co_varnames[:code.co_argcount]
@@ -215,13 +174,13 @@ class ExecutionTracer:
         
         for name in param_names:
             if name in frame.f_locals:
-                params[name] = self.serialize_value(frame.f_locals[name])
+                params[name] = self._serialize_value(frame.f_locals[name])
         
         # Handle *args and **kwargs
         if code.co_flags & 0x04:  # CO_VARARGS
             varargs_name = code.co_varnames[code.co_argcount]
             if varargs_name in frame.f_locals:
-                params['*' + varargs_name] = self.serialize_value(frame.f_locals[varargs_name])
+                params['*' + varargs_name] = self._serialize_value(frame.f_locals[varargs_name])
                 
         if code.co_flags & 0x08:  # CO_VARKEYWORDS
             kwargs_index = code.co_argcount
@@ -229,17 +188,17 @@ class ExecutionTracer:
                 kwargs_index += 1
             kwargs_name = code.co_varnames[kwargs_index]
             if kwargs_name in frame.f_locals:
-                params['**' + kwargs_name] = self.serialize_value(frame.f_locals[kwargs_name])
+                params['**' + kwargs_name] = self._serialize_value(frame.f_locals[kwargs_name])
                 
         return params
     
-    def get_current_function_name(self) -> str:
+    def _get_current_function_name(self) -> str:
         """Get the name of the currently executing function"""
         if self.call_stack:
             return self.call_stack[-1]['func_name']
         return "<module>"
         
-    def get_function_info(self, frame):
+    def _get_function_info(self, frame):
         """Extract detailed function information"""
         func_name = frame.f_code.co_name
         filename = frame.f_code.co_filename
@@ -269,7 +228,7 @@ class ExecutionTracer:
             'line_no': line_no
         }
     
-    def update_function_variables(self, frame):
+    def _update_function_variables(self, frame):
         """Update the current function's variable dictionary with local variables"""
         if not self.function_variables_stack:
             return
@@ -283,20 +242,20 @@ class ExecutionTracer:
         # Update only local variables
         for var_name in local_var_names:
             if var_name in frame.f_locals:
-                current_func_vars[var_name] = self.serialize_value(frame.f_locals[var_name])
+                current_func_vars[var_name] = self._serialize_value(frame.f_locals[var_name])
     
-    def get_current_seen_variables(self) -> Dict[str, Any]:
+    def _get_current_seen_variables(self) -> Dict[str, Any]:
         """Get a copy of the current function's seen variables"""
         if self.function_variables_stack:
             return dict(copy.deepcopy(self.function_variables_stack[-1]))
         return {}
     
-    def add_trace_entry(self, event_type: str, frame, **kwargs):
+    def _add_trace_entry(self, event_type: str, frame, **kwargs):
         """Add a structured trace entry"""
         filename = frame.f_code.co_filename
         line_no = frame.f_lineno
-        function_name = self.get_current_function_name()
-        source_line = self.get_source_line(filename, line_no)
+        function_name = self._get_current_function_name()
+        source_line = self._get_source_line(filename, line_no)
         
         entry = {
             'event_id': self.event_id,
@@ -311,18 +270,18 @@ class ExecutionTracer:
         
         self.trace_data.append(entry)
         
-    def trace_function(self, frame, event, arg):
-        func_info = self.get_function_info(frame)
+    def _trace_function(self, frame, event, arg):
+        func_info = self._get_function_info(frame)
 
-        if self.is_stdlib_call(func_info['filename']):
-            return self.trace_function
+        if self._is_stdlib_call(func_info['filename']):
+            return self._trace_function
 
         if event == 'call':
             self.control_stack = []  # reset on new function entry
             # --- existing call handling unchanged ---
             current_depth = len(self.call_stack)
             self.max_depth = max(self.max_depth, current_depth)
-            parameters = self.get_function_parameters(frame)
+            parameters = self._get_function_parameters(frame)
             func_vars = dict(parameters)
             self.function_variables_stack.append(func_vars)
             if self.call_stack:
@@ -332,7 +291,7 @@ class ExecutionTracer:
                 self.call_graph[caller_name].add(callee_name)
                 self.call_counts[(caller_name, callee_name)] += 1
             self.call_stack.append(func_info)
-            self.add_trace_entry('Function', frame, parameters=parameters)
+            self._add_trace_entry('Function', frame, parameters=parameters)
 
         elif event == 'return':
             self.control_stack = []  # reset when leaving function
@@ -340,17 +299,17 @@ class ExecutionTracer:
                 self.call_stack.pop()
                 if self.function_variables_stack:
                     self.function_variables_stack.pop()
-                self.add_trace_entry('Return', frame, return_value=self.serialize_value(arg))
+                self._add_trace_entry('Return', frame, return_value=self._serialize_value(arg))
 
         elif event == 'line':
             # Update local variables first (as before)
-            self.update_function_variables(frame)
+            self._update_function_variables(frame)
             filename = frame.f_code.co_filename
             line_no = frame.f_lineno
-            source_line = self.get_source_line(filename, line_no)
+            source_line = self._get_source_line(filename, line_no)
 
             # Vars defined / used (AST)
-            vars_defined, vars_used = self.get_vars_defined_and_used(source_line)
+            vars_defined, vars_used = self._get_vars_defined_and_used(source_line)
 
             # Indentation + stripped form
             indent = self._line_indent(source_line)
@@ -432,8 +391,8 @@ class ExecutionTracer:
                     truth_value = False
 
                 # Add the Line event for this control header (the control_deps computed above apply).
-                seen_variables = self.get_current_seen_variables()
-                self.add_trace_entry(
+                seen_variables = self._get_current_seen_variables()
+                self._add_trace_entry(
                     'Line',
                     frame,
                     vars_defined=vars_defined,
@@ -452,8 +411,8 @@ class ExecutionTracer:
 
             else:
                 # Normal non-control line: just record it with the active control_deps
-                seen_variables = self.get_current_seen_variables()
-                self.add_trace_entry(
+                seen_variables = self._get_current_seen_variables()
+                self._add_trace_entry(
                     'Line',
                     frame,
                     vars_defined=vars_defined,
@@ -465,17 +424,17 @@ class ExecutionTracer:
         elif event == 'exception':
             if self.call_stack:
                 exc_type, exc_value, exc_tb = arg
-                self.add_trace_entry(
+                self._add_trace_entry(
                     'Exception',
                     frame,
                     exception_type=exc_type.__name__,
                     exception_value=str(exc_value)
                 )
-        return self.trace_function
+        return self._trace_function
     
     def start_tracing(self):
         """Start the trace collection"""
-        sys.settrace(self.trace_function)
+        sys.settrace(self._trace_function)
         
     def stop_tracing(self):
         """Stop the trace collection"""
