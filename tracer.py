@@ -23,7 +23,7 @@ class ExecutionTracer:
         self.function_variables_stack = []
         
         # Control dependency tracking
-        self.control_stack = []  # Stack of (event_id, indentation_level) for active control statements
+        self.control_stack = []  # Stack of (event_id, indentation_level, control_type) for active control statements
         
         # Standard library modules to exclude
         self.stdlib_modules = {
@@ -114,34 +114,68 @@ class ExecutionTracer:
         if not stripped.endswith(':'):
             return False
         
-        # Check for control flow keywords
-        control_keywords = ['if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'with']
+        # Check for control flow keywords (excluding try/except/finally/with)
+        control_keywords = ['if', 'elif', 'else', 'for', 'while']
         first_word = stripped.split()[0] if stripped.split() else ""
         return first_word in control_keywords
     
     def is_block_continuation(self, source_line: str) -> bool:
-        """Check if a line continues a control block (elif, else, except, finally)"""
+        """Check if a line continues a control block (elif, else)"""
         stripped = source_line.strip()
         if not stripped.endswith(':'):
             return False
         
-        continuation_keywords = ['elif', 'else', 'except', 'finally']
+        continuation_keywords = ['elif', 'else']
         first_word = stripped.split()[0] if stripped.split() else ""
         return first_word in continuation_keywords
     
+    def get_control_statement_info(self, source_line: str) -> Tuple[bool, str, bool]:
+        """
+        Analyze a source line to determine control statement information.
+        
+        Returns:
+            Tuple[bool, str, bool]: (is_control, control_type, is_negative_branch)
+            - is_control: Whether this line is a control statement
+            - control_type: Type of control statement ('if', 'elif', 'else', 'for', 'while', '')
+            - is_negative_branch: Whether this represents a negative branch (for elif/else)
+        """
+        stripped = source_line.strip()
+        
+        if not stripped.endswith(':'):
+            return False, "", False
+        
+        # Extract the first word
+        words = stripped.split()
+        if not words:
+            return False, "", False
+            
+        first_word = words[0]
+        
+        # Check if it's a control statement we care about
+        control_keywords = ['if', 'elif', 'else', 'for', 'while']
+        if first_word not in control_keywords:
+            return False, "", False
+        
+        # Determine if it's a negative branch
+        is_negative_branch = first_word in ['elif', 'else']
+        
+        return True, first_word, is_negative_branch
+    
     def update_control_stack(self, source_line: str, current_indentation: int, current_event_id: int):
         """Update the control stack based on current line"""
+        is_control, control_type, is_negative_branch = self.get_control_statement_info(source_line)
+        
         # Remove control statements that are no longer active
         # (when we encounter a line with indentation <= control statement's indentation)
         while self.control_stack:
-            control_event_id, control_indentation = self.control_stack[-1]
+            control_event_id, control_indentation, control_stmt_type = self.control_stack[-1]
             
-            # Special case: if current line is a block continuation (elif, else, etc.)
-            # it should be at the same level as the original if/try
+            # Special case: if current line is a block continuation (elif, else)
+            # it should be at the same level as the original if
             if self.is_block_continuation(source_line):
                 if current_indentation == control_indentation:
                     # Replace the last control statement with this continuation
-                    self.control_stack[-1] = (current_event_id, current_indentation)
+                    self.control_stack[-1] = (current_event_id, current_indentation, control_type)
                     break
                 elif current_indentation < control_indentation:
                     self.control_stack.pop()
@@ -155,12 +189,59 @@ class ExecutionTracer:
                     break
         
         # If current line is a control statement, add it to stack
-        if self.is_control_statement(source_line):
-            self.control_stack.append((current_event_id, current_indentation))
+        if is_control and not self.is_block_continuation(source_line):
+            self.control_stack.append((current_event_id, current_indentation, control_type))
     
-    def get_current_control_dependencies(self) -> List[int]:
-        """Get the current control dependencies (event IDs)"""
-        return [event_id for event_id, _ in self.control_stack]
+    def get_current_control_dependencies(self, current_control_type: str = "") -> List[int]:
+        """
+        Get the current control dependencies (event IDs) with negative branch logic.
+        
+        Args:
+            current_control_type: Type of current control statement if any
+            
+        Returns:
+            List[int]: List of event IDs, where negative IDs indicate False branches
+        """
+        if not self.control_stack:
+            return []
+        
+        dependencies = []
+        
+        # Handle elif/else negative branch logic
+        if current_control_type in ['elif', 'else']:
+            # For elif/else, we need to mark previous conditions at the same level as negative
+            current_indentation = self.control_stack[-1][1] if self.control_stack else 0
+            
+            # Find all control statements at the same indentation level (elif chain)
+            same_level_controls = []
+            other_level_controls = []
+            
+            for event_id, indentation, control_type in self.control_stack[:-1]:  # Exclude current
+                if indentation == current_indentation and control_type in ['if', 'elif']:
+                    same_level_controls.append(event_id)
+                else:
+                    other_level_controls.append(event_id)
+            
+            # Add other level controls as positive (nested conditions)
+            dependencies.extend(other_level_controls)
+            
+            # Add same level controls as negative (elif chain - previous were False)
+            dependencies.extend([-event_id for event_id in same_level_controls])
+            
+            # Add current control as positive (if it's elif, not else)
+            if current_control_type == 'elif' and self.control_stack:
+                current_event_id = self.control_stack[-1][0]
+                dependencies.append(current_event_id)
+            elif current_control_type == 'else':
+                # For else, also mark the last elif/if as negative
+                if self.control_stack:
+                    current_event_id = self.control_stack[-1][0]
+                    dependencies.append(-current_event_id)
+        else:
+            # Normal case: all controls in stack are positive dependencies
+            dependencies = [event_id for event_id, _, _ in self.control_stack]
+        
+        return dependencies
     
     def analyze_variable_usage(self, source_line: str) -> Tuple[List[str], List[str]]:
         """Analyze which variables are defined vs used in a line using AST"""
@@ -225,10 +306,22 @@ class ExecutionTracer:
                         vars_defined.add(name)
                         
         except SyntaxError:
-            # If parsing fails, fall back to the original simple approach
-            for node in ast.walk(ast.parse(code_to_parse, mode='exec')):
-                if isinstance(node, ast.Name):
-                    vars_used.add(node.id)
+            # If parsing fails, fall back to simple regex approach
+            # Look for assignment patterns
+            if '=' in stripped_line and not any(op in stripped_line for op in ['==', '!=', '<=', '>=', '<', '>']):
+                parts = stripped_line.split('=', 1)
+                if len(parts) == 2:
+                    # Try to extract variable names from left side
+                    left_side = parts[0].strip()
+                    # Simple variable name extraction
+                    import re
+                    var_matches = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', left_side)
+                    vars_defined.update(var_matches)
+            
+            # Extract all identifier-like strings as potentially used variables
+            import re
+            all_vars = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', stripped_line)
+            vars_used.update(all_vars)
         
         return list(vars_defined), list(vars_used)
     
@@ -338,7 +431,7 @@ class ExecutionTracer:
             'event_type': event_type,
             'line_number': line_no,
             'statement': source_line,
-            'filepath': filename,
+            # 'filepath': filename,
             'function_name': function_name,
             **kwargs
         }
@@ -411,13 +504,16 @@ class ExecutionTracer:
             source_line = self.get_source_line(frame.f_code.co_filename, frame.f_lineno)
             vars_defined, vars_used = self.analyze_variable_usage(source_line)
             
+            # Get control statement info for this line
+            is_control, control_type, is_negative_branch = self.get_control_statement_info(source_line)
+            
             # Update control stack based on current line
             current_indentation = self.get_indentation_level(source_line)
-            current_event_id = self.event_id  # This will be the event_id for this line
+            current_event_id = self.event_id  if not is_negative_branch else -self.event_id
             self.update_control_stack(source_line, current_indentation, current_event_id)
             
-            # Get current control dependencies
-            control_dependencies = self.get_current_control_dependencies()
+            # Get current control dependencies (pass control_type for special elif/else handling)
+            control_dependencies = self.get_current_control_dependencies(control_type if is_control else "")
             
             # Get current seen variables
             seen_variables = self.get_current_seen_variables()
@@ -477,7 +573,7 @@ class ExecutionTracer:
             'call_graph': dict(self.call_graph),
             'call_counts': dict(self.call_counts)
         }
-        
+                
 # ==============================================================================
 #  Demonstration Code
 # ==============================================================================
