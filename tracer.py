@@ -629,6 +629,80 @@ def main():
 #  Main Execution Block
 # ==============================================================================
 
+def test_simple_if_else(x):
+    """Test Case 1: Simple if-else"""
+    if x > 5:                    # Event A: condition
+        result = "big"           # Event B: control_dependencies=[A] 
+    else:                        # (not traced as line event)
+        result = "small"         # Event C: control_dependencies=[-A]
+    return result
+
+def test_elif_chain(x):
+    """Test Case 2: elif chain (same level)"""
+    if x < 0:                    # Event A
+        result = "negative"      # Event B: control_dependencies=[A]
+    elif x == 0:                 # Event C: control_dependencies=[-A, C]
+        result = "zero"          # Event D: control_dependencies=[-A, C]
+    else:                        # (not traced)
+        result = "positive"      # Event E: control_dependencies=[-A, -C]
+    return result
+
+def test_nested_if(x, y):
+    """Test Case 3: Nested if statements (different levels)"""
+    if x > 0:                    # Event A
+        if y > 0:                # Event B: control_dependencies=[A]
+            result = "both positive"  # Event C: control_dependencies=[A, B]
+        else:                    # (not traced)
+            result = "x pos, y neg"   # Event D: control_dependencies=[A, -B]
+    else:                        # (not traced)
+        result = "x negative"    # Event E: control_dependencies=[-A]
+    return result
+
+def test_mixed_nested_elif(x, y):
+    """Test Case 4: Mixed nested and elif"""
+    if x > 10:                   # Event A
+        if y > 5:                # Event B: control_dependencies=[A]
+            result = "both big"  # Event C: control_dependencies=[A, B]
+        else:                    # (not traced)
+            result = "x big, y small"  # Event D: control_dependencies=[A, -B]
+    elif x > 0:                  # Event E: control_dependencies=[-A, E]
+        result = "x medium"      # Event F: control_dependencies=[-A, E]
+    else:                        # (not traced)
+        result = "x small"       # Event G: control_dependencies=[-A, -E]
+    return result
+
+def test_sequential_ifs(x, y):
+    """Test Case 5: Sequential independent if statements"""
+    result = []
+    
+    if x > 0:                    # Event A
+        result.append("x positive")  # Event B: control_dependencies=[A]
+    else:                        # (not traced)
+        result.append("x non-positive")  # Event C: control_dependencies=[-A]
+    
+    if y > 0:                    # Event D: control_dependencies=[] (independent)
+        result.append("y positive")  # Event E: control_dependencies=[D]
+    else:                        # (not traced)
+        result.append("y non-positive")  # Event F: control_dependencies=[-D]
+    
+    return result
+
+def test_complex_nesting(a, b, c):
+    """Test Case 6: Complex nesting with multiple levels"""
+    if a > 0:                    # Event A
+        if b > 0:                # Event B: control_dependencies=[A]
+            if c > 0:            # Event C: control_dependencies=[A, B]
+                result = "all positive"      # Event D: control_dependencies=[A, B, C]
+            else:                # (not traced)
+                result = "a,b pos, c neg"    # Event E: control_dependencies=[A, B, -C]
+        elif b == 0:             # Event F: control_dependencies=[A, -B, F]
+            result = "a pos, b zero"         # Event G: control_dependencies=[A, -B, F]
+        else:                    # (not traced)
+            result = "a pos, b neg"          # Event H: control_dependencies=[A, -B, -F]
+    else:                        # (not traced)
+        result = "a not positive"            # Event I: control_dependencies=[-A]
+    return result
+
 if __name__ == "__main__":
     print("--- ExecutionTracer Demonstration ---")
     
@@ -642,7 +716,38 @@ if __name__ == "__main__":
     # 3. Run the target code
     # Using a try/finally block ensures tracing is stopped even if an error occurs
     try:
-        main()
+        # Test Case 1: Simple If-Else
+        test_simple_if_else(10)
+        test_simple_if_else(3)
+
+        # Test Case 2: elif chain
+        test_elif_chain(-5)
+        test_elif_chain(0)
+        test_elif_chain(5)
+
+        # Test Case 3: Nested if
+        test_nested_if(5, 3)
+        test_nested_if(5, -3)
+        test_nested_if(-5, 3)
+
+        # Test Case 4: Mixed nested and elif
+        test_mixed_nested_elif(15, 10)
+        test_mixed_nested_elif(15, 2)
+        test_mixed_nested_elif(5, 10)
+        test_mixed_nested_elif(-5, 10)
+
+        # Test Case 5: Sequential independent ifs
+        test_sequential_ifs(5, 3)
+        test_sequential_ifs(5, -3)
+        test_sequential_ifs(-5, 3)
+        test_sequential_ifs(-5, -3)
+
+        # Test Case 6: Complex nesting
+        test_complex_nesting(1, 1, 1)
+        test_complex_nesting(1, 1, -1)
+        test_complex_nesting(1, 0, 1)
+        test_complex_nesting(1, -1, 1)
+        test_complex_nesting(-1, 1, 1)
     except Exception as e:
         print(f"An error occurred: {e}")
     finally:
