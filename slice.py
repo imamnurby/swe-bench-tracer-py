@@ -2,8 +2,9 @@ def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
     """
     Performs backward dynamic slicing on an execution trace.
 
-    Now considers both direct control dependencies and inherited control dependencies
-    (e.g., from function call sites).
+    Now considers both direct and inherited control dependencies.
+    Also ensures the start event is considered for control dependency resolution,
+    even if it doesn't define the target variable.
 
     Args:
         trace: List of event dictionaries from execution trace.
@@ -18,15 +19,20 @@ def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
     trace_indexed = {event['event_id']: event for event in trace}
 
     # Initialize algorithm state
-    influencing_vars = {target_var}      # Variables whose origins we need to trace
-    control_dependent_events = set()     # Event IDs whose control dependencies need explaining
-    slice_result = []                    # Result slice: list of event dicts in traversal order
+    influencing_vars = {target_var}
+    control_dependent_events = {start_event_id}  # ← KEY FIX: start event may need control explanation
+    slice_result = []
 
     # Start from start_event_id and go backward to event_id 0
     current_id = start_event_id
 
     while current_id >= 0:
         stmt = trace_indexed[current_id]
+        print(current_id)
+        print(control_dependent_events)
+        print(influencing_vars)
+        print(slice_result)
+        print("-----")
 
         # Check if we should terminate early
         if len(influencing_vars) == 0 and len(control_dependent_events) == 0:
@@ -34,7 +40,7 @@ def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
 
         # --- 1. Dynamic Data Dependency Check ---
         vars_defined = set(stmt.get('vars_defined', []))
-        if vars_defined & influencing_vars:  # Any overlap?
+        if vars_defined & influencing_vars:
             influencing_vars -= vars_defined
             vars_used = stmt.get('vars_used', [])
             influencing_vars.update(vars_used)
@@ -42,18 +48,16 @@ def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
             control_dependent_events.add(current_id)
 
         # --- 2. Dynamic Control Dependency Check ---
-        # Consider BOTH direct and inherited control dependencies
         controlling = False
         dependent_events_to_remove = set()
 
         for dep_id in control_dependent_events:
             dep_event = trace_indexed[dep_id]
-            # Combine direct and inherited control dependencies
             all_ctrl_deps = set(dep_event.get('control_dependencies', [])) | \
                            set(dep_event.get('inherited_control_dependencies', []))
 
-            # Check if current_id or -current_id is among them
             if current_id in all_ctrl_deps or -current_id in all_ctrl_deps:
+                print("X")
                 controlling = True
                 dependent_events_to_remove.add(dep_id)
 
@@ -64,7 +68,6 @@ def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
             slice_result.append(stmt)
             control_dependent_events.add(current_id)
 
-        # Move to previous event
         current_id -= 1
 
     return slice_result
@@ -100,8 +103,8 @@ def read_trace_from_jsonl(jsonl_path: str) -> list:
 def main():
     # --- CONFIGURE THESE VALUES ---
     jsonl_file_path = "/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/demonstration_trace.jsonl"      # Path to your .jsonl trace file
-    start_event_id = 10                  # Example: event ID where error was observed
-    target_var = "y"                     # Example: variable of interest
+    start_event_id = 5                  # Example: event ID where error was observed
+    target_var = "k"                     # Example: variable of interest
 
     # --- READ TRACE ---
     trace = read_trace_from_jsonl(jsonl_file_path)
