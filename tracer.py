@@ -23,6 +23,9 @@ class ExecutionTracer:
         self.control_stack = []
         self.inherited_control_stack = []
         
+        # Map: qualified_function_name -> { var_name -> last_def_event_id }
+        # This is used to track where variables were last defined (per-function)
+        self.last_def_event = defaultdict(dict)
         
         # Stack of variable dictionaries, one per function call
         self.function_variables_stack = []
@@ -300,28 +303,106 @@ class ExecutionTracer:
                 caller_snapshot.extend([dict(e) for e in self.inherited_control_stack[-1]])
             self.inherited_control_stack.append(caller_snapshot)
             self.control_stack = []  # reset on new function entry
-            # --- existing call handling unchanged ---
+
+            # --- existing call handling unchanged (depth / vars stack) ---
             current_depth = len(self.call_stack)
             self.max_depth = max(self.max_depth, current_depth)
+
+            # serialize parameters for JSON output (existing helper)
             parameters = self._get_function_parameters(frame)
             func_vars = dict(parameters)
             self.function_variables_stack.append(func_vars)
+
+            # --- NEW: compute parameter_sources (best-effort) ---
+            parameter_sources = {}
+            # caller frame is the previous stack frame (may be None for some calls)
+            caller_frame = frame.f_back
+            caller_qualified = None
+            if self.call_stack:
+                caller_qualified = self.call_stack[-1]['qualified_name']
+            else:
+                caller_qualified = "<module>"
+
+            # Raw parameter names from callee code object (handle basic args only; extend if needed)
+            code = frame.f_code
+            param_count = code.co_argcount
+            param_names = list(code.co_varnames[:param_count])
+
+            # handle positional varargs and kwargs names if present
+            idx = param_count
+            if code.co_flags & 0x04:  # CO_VARARGS
+                varargs_name = code.co_varnames[idx]
+                param_names.append(varargs_name)
+                idx += 1
+            if code.co_flags & 0x08:  # CO_VARKEYWORDS
+                kwargs_name = code.co_varnames[idx]
+                param_names.append(kwargs_name)
+
+            for pname in param_names:
+                source_var = None
+                source_event = None
+                raw_val = frame.f_locals.get(pname, None)
+
+                # Try identity match in caller locals (best indicator that caller variable produced the arg)
+                if caller_frame:
+                    for cname, cval in caller_frame.f_locals.items():
+                        try:
+                            if raw_val is cval:
+                                source_var = cname
+                                break
+                        except Exception:
+                            # some objects may raise under `is` checks in exotic cases — ignore
+                            pass
+
+                    # fallback to equality match if no identity match (best-effort)
+                    if source_var is None:
+                        for cname, cval in caller_frame.f_locals.items():
+                            try:
+                                if raw_val == cval:
+                                    source_var = cname
+                                    break
+                            except Exception:
+                                pass
+
+                    if source_var is not None:
+                        # look up last definition event in caller
+                        source_event = self.last_def_event.get(caller_qualified, {}).get(source_var)
+
+                # If we couldn't find a caller-local variable, leave var/event as null
+                parameter_sources[pname] = {
+                    "var": source_var,
+                    "event_id": source_event
+                }
+
+            # update call graph info (existing)
             if self.call_stack:
                 caller_info = self.call_stack[-1]
                 caller_name = caller_info['qualified_name']
                 callee_name = func_info['qualified_name']
                 self.call_graph[caller_name].add(callee_name)
                 self.call_counts[(caller_name, callee_name)] += 1
+
+            # push callee onto the call stack (existing)
             self.call_stack.append(func_info)
+
+            # add the Function entry — include parameter_sources
             self._add_trace_entry(
                 'Function',
                 frame,
                 parameters=parameters,
+                parameter_sources=parameter_sources,
                 inherited_control_dependencies=[
                     e['id'] if e.get('truth') is not False else -e['id']
                     for e in caller_snapshot
                 ]
             )
+
+            # Record that the callee's parameters are "defined" by the Function event we just emitted.
+            # Use the Function event's id = self.event_id - 1
+            callee_qualified = func_info['qualified_name']
+            for pname in param_names:
+                # note: we record only the parameter name (they are locals of the callee)
+                self.last_def_event[callee_qualified][pname] = self.event_id - 1
 
         elif event == 'return':
             self.control_stack = []  # reset when leaving function
@@ -448,6 +529,13 @@ class ExecutionTracer:
                     seen_variables=seen_variables
                 )
 
+                # Record last-definition event ids for any variables defined on this line
+                if vars_defined:
+                    cur_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
+                    for v in vars_defined:
+                        # event id of the Line event we just added is self.event_id - 1
+                        self.last_def_event[cur_qualified][v] = self.event_id - 1
+
                 # Now push the control entry using the event id assigned above
                 self.control_stack.append({
                     'indent': indent,
@@ -467,6 +555,12 @@ class ExecutionTracer:
                     inherited_control_dependencies=inherited_ids,
                     seen_variables=seen_variables
                 )
+
+                # Record last-definition event ids for any variables defined on this line
+                if vars_defined:
+                    cur_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
+                    for v in vars_defined:
+                        self.last_def_event[cur_qualified][v] = self.event_id - 1
 
         elif event == 'exception':
             if self.call_stack:
@@ -561,6 +655,17 @@ def E(z):
 
 def F(z):
     print(f"[F] Function F called with z = {z} (not executed in this trace)")
+
+# def A():
+#     x = 50
+#     B(x)
+
+# def B(k):
+#     y = k + 1
+#     D(y)
+
+# def D(z):
+#     return z
     
 if __name__ == "__main__":
     print(">>> Executing actual functions:")
