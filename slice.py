@@ -33,25 +33,30 @@ def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
         if len(influencing_vars) == 0 and len(control_dependent_events) == 0:
             break
 
-        # --- 1. Interprocedural Data Dependency Check (NEW) ---
-        # If this is a Function entry and target var is a parameter with a source
+        # --- 1. Interprocedural Data Dependency Check ---
+        # If this is a Function entry and target var is a parameter with source(s)
         if stmt['event_type'] == 'Function':
             parameters = stmt.get('parameters', {})
             param_sources = stmt.get('parameter_sources', {})
             matched_params = influencing_vars & set(parameters.keys())
 
             for param in matched_params:
-                source_info = param_sources.get(param)
-                if source_info and 'var' in source_info:
-                    source_var = source_info['var']
-                    # Propagate the source variable into influencing_vars
-                    influencing_vars.add(source_var)
-                    # Optional: if source event_id is known and valid, we could prioritize it,
-                    # but backward traversal will naturally reach it.
-                    # We include this Function event in the slice since it's part of the data flow.
-                    slice_result.append(stmt)
-                    # Also mark this event as control-dependent to ensure control deps are resolved
-                    control_dependent_events.add(current_id)
+                sources = param_sources.get(param, [])
+                # Ensure it's treated as a list (even if old format was single dict)
+                if isinstance(sources, dict):
+                    sources = [sources]  # backwards compatibility, if needed
+                elif not isinstance(sources, list):
+                    sources = []  # fallback
+
+                for source_info in sources:
+                    if isinstance(source_info, dict) and 'var' in source_info:
+                        source_var = source_info['var']
+                        influencing_vars.add(source_var)
+                        # Optional: use source_info['event_id'] for directed jump (not needed in backward walk)
+
+                # Include this Function event in the slice — it’s part of the data flow
+                slice_result.append(stmt)
+                control_dependent_events.add(current_id)
 
         # --- 2. Dynamic Data Dependency Check ---
         vars_defined = set(stmt.get('vars_defined', []))
@@ -86,11 +91,6 @@ def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
 
     return slice_result
 
-
-
-
-
-
 import json
 
 def read_trace_from_jsonl(jsonl_path: str) -> list:
@@ -117,8 +117,8 @@ def read_trace_from_jsonl(jsonl_path: str) -> list:
 def main():
     # --- CONFIGURE THESE VALUES ---
     jsonl_file_path = "/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/demonstration_trace.jsonl"      # Path to your .jsonl trace file
-    start_event_id = 7                  # Example: event ID where error was observed
-    target_var = "y"                     # Example: variable of interest
+    start_event_id = 6                  # Example: event ID where error was observed
+    target_var = "k"                     # Example: variable of interest
 
     # --- READ TRACE ---
     trace = read_trace_from_jsonl(jsonl_file_path)
