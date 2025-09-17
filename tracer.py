@@ -524,10 +524,10 @@ def A():
         C(x)  # ← CONTROL + DATA DEPENDENCY (not taken here)
 
 
-def B(x):
-    print(f"[B] Starting function B with x = {x}")
-    y = x + 1
-    print(f"[B] Computed y = {y} from x")
+def B(k):
+    print(f"[B] Starting function B with k = {k}")
+    y = k + 1
+    print(f"[B] Computed y = {y} from k")
     D(y)  # ← DATA DEPENDENCY: y passed to D
 
 
