@@ -173,6 +173,63 @@ class ExecutionTracer:
             # Fallback: naive split but only if tokenize failed
             return line.split('#', 1)[0]
 
+    def _get_call_arg_varnames_from_call_line(self, source_line: str, callee_func_name: str):
+        """
+        Parse a single source line and, if it contains a call to `callee_func_name`,
+        return a tuple (positional_arg_varlists, keyword_arg_varmap).
+
+        - positional_arg_varlists: list where each element is a list of variable
+          names used in the corresponding positional argument expression.
+        - keyword_arg_varmap: dict mapping keyword-name -> list(variable-names).
+          If a `**kwargs` expansion is present it will be returned under the
+          special key '__KW_EXPANSION__'.
+
+        Best-effort: returns ([], {}) on parse errors or no match.
+        """
+        code_no_comments = self._strip_comments_preserving_strings(source_line)
+        try:
+            tree = ast.parse(code_no_comments, mode='exec')
+        except SyntaxError:
+            return [], {}
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                match = False
+                if isinstance(func, ast.Name) and func.id == callee_func_name:
+                    match = True
+                elif isinstance(func, ast.Attribute) and func.attr == callee_func_name:
+                    match = True
+
+                if not match:
+                    continue
+
+                pos_arg_varlists = []
+                for arg in node.args:
+                    sub = arg.value if isinstance(arg, ast.Starred) else arg
+                    varnames = set()
+                    for n in ast.walk(sub):
+                        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
+                            varnames.add(n.id)
+                    pos_arg_varlists.append(list(varnames))
+
+                kw_arg_map = {}
+                for kw in node.keywords:
+                    key = kw.arg  # None indicates a **kwargs expansion
+                    val = kw.value
+                    varnames = set()
+                    for n in ast.walk(val):
+                        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
+                            varnames.add(n.id)
+                    if key is None:
+                        kw_arg_map['__KW_EXPANSION__'] = list(varnames)
+                    else:
+                        kw_arg_map[key] = list(varnames)
+
+                return pos_arg_varlists, kw_arg_map
+
+        return [], {}
+
 
     def _serialize_value(self, value: Any) -> Any:
         """Serialize a value for JSON output"""
@@ -313,15 +370,18 @@ class ExecutionTracer:
             func_vars = dict(parameters)
             self.function_variables_stack.append(func_vars)
 
-            # --- NEW: compute parameter_sources (best-effort) ---
+                        # --- NEW: compute parameter_sources (best-effort)
+            # Strategy:
+            # 1) Parse the caller source line to find the call AST and extract variables
+            #    used in each argument expression (positional and keyword).
+            # 2) Map those variable names to their last-definition event id recorded
+            #    for the caller-qualified scope.
+            # 3) If no variables are found (e.g. literal-only arg or parse failed),
+            #    fall back to the previous identity/equality heuristic.
             parameter_sources = {}
             # caller frame is the previous stack frame (may be None for some calls)
             caller_frame = frame.f_back
-            caller_qualified = None
-            if self.call_stack:
-                caller_qualified = self.call_stack[-1]['qualified_name']
-            else:
-                caller_qualified = "<module>"
+            caller_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
 
             # Raw parameter names from callee code object (handle basic args only; extend if needed)
             code = frame.f_code
@@ -330,6 +390,8 @@ class ExecutionTracer:
 
             # handle positional varargs and kwargs names if present
             idx = param_count
+            varargs_name = None
+            kwargs_name = None
             if code.co_flags & 0x04:  # CO_VARARGS
                 varargs_name = code.co_varnames[idx]
                 param_names.append(varargs_name)
@@ -338,41 +400,63 @@ class ExecutionTracer:
                 kwargs_name = code.co_varnames[idx]
                 param_names.append(kwargs_name)
 
-            for pname in param_names:
-                source_var = None
-                source_event = None
-                raw_val = frame.f_locals.get(pname, None)
+            # Attempt to parse the caller's source line and extract variable names used
+            pos_arg_vars, kw_arg_vars = [], {}
+            try:
+                if caller_frame is not None:
+                    caller_src = self._get_source_line(caller_frame.f_code.co_filename, caller_frame.f_lineno)
+                    pos_arg_vars, kw_arg_vars = self._get_call_arg_varnames_from_call_line(caller_src, func_info['func_name'])
+            except Exception:
+                pos_arg_vars, kw_arg_vars = [], {}
 
-                # Try identity match in caller locals (best indicator that caller variable produced the arg)
-                if caller_frame:
+            # Map parameters -> list of variable names that appear in the corresponding arg expression
+            fixed_count = param_count
+            for i, pname in enumerate(param_names):
+                found_varnames = []
+
+                # 1) If the argument was passed as a keyword (e.g. B(k=x+1)), use that mapping
+                if pname in kw_arg_vars:
+                    found_varnames = kw_arg_vars.get(pname, []) or []
+                # 2) Positional mapping for fixed parameters
+                elif i < fixed_count:
+                    if i < len(pos_arg_vars):
+                        found_varnames = pos_arg_vars[i] or []
+                # 3) varargs: collect any remaining positional args beyond the fixed arity
+                elif varargs_name is not None and pname == varargs_name:
+                    extra = pos_arg_vars[fixed_count:] if len(pos_arg_vars) > fixed_count else []
+                    agg = []
+                    for sub in extra:
+                        agg.extend(sub)
+                    found_varnames = agg
+                # 4) kwargs expansion (**kwargs) — best-effort: include any kw expansion varnames
+                elif kwargs_name is not None and pname == kwargs_name:
+                    found_varnames = kw_arg_vars.get('__KW_EXPANSION__', []) or []
+
+                # 5) Fallback to identity/equality heuristic if we didn't find any variable names
+                if not found_varnames and caller_frame is not None:
+                    raw_val = frame.f_locals.get(pname, None)
+                    found_names = []
                     for cname, cval in caller_frame.f_locals.items():
                         try:
                             if raw_val is cval:
-                                source_var = cname
-                                break
+                                found_names.append(cname)
+                            elif raw_val == cval:
+                                found_names.append(cname)
                         except Exception:
-                            # some objects may raise under `is` checks in exotic cases — ignore
+                            # ignore comparison errors
                             pass
+                    # deduplicate while preserving ordering
+                    found_varnames = list(dict.fromkeys(found_names))
 
-                    # fallback to equality match if no identity match (best-effort)
-                    if source_var is None:
-                        for cname, cval in caller_frame.f_locals.items():
-                            try:
-                                if raw_val == cval:
-                                    source_var = cname
-                                    break
-                            except Exception:
-                                pass
-
-                    if source_var is not None:
-                        # look up last definition event in caller
-                        source_event = self.last_def_event.get(caller_qualified, {}).get(source_var)
-
-                # If we couldn't find a caller-local variable, leave var/event as null
-                parameter_sources[pname] = {
-                    "var": source_var,
-                    "event_id": source_event
-                }
+                # 6) Convert variable names -> {var, event_id} objects, or None if empty
+                if found_varnames:
+                    mapped = []
+                    for vname in found_varnames:
+                        src_event = self.last_def_event.get(caller_qualified, {}).get(vname)
+                        mapped.append({"var": vname, "event_id": src_event})
+                    parameter_sources[pname] = mapped
+                else:
+                    parameter_sources[pname] = None
 
             # update call graph info (existing)
             if self.call_stack:
@@ -606,66 +690,68 @@ class ExecutionTracer:
         }
 
 
-def A():
-    print("[A] Starting function A")
-    x = 50
-    print(f"[A] Assigned x = {x}")
-    if x > 5:
-        print("[A] Condition true: calling B(x)")
-        B(x)  # ← DATA DEPENDENCY: x passed to B
-    else:
-        print("[A] Condition false: calling C(x)")
-        C(x)  # ← CONTROL + DATA DEPENDENCY (not taken here)
-
-
-def B(k):
-    print(f"[B] Starting function B with k = {k}")
-    y = k + 1
-    print(f"[B] Computed y = {y} from k")
-    D(y)  # ← DATA DEPENDENCY: y passed to D
-
-
-def C(x):
-    print(f"[C] Function C called with x = {x} (not executed in this trace)")
-    # Not called in this scenario — included for completeness
-
-
-def D(y):
-    print(f"[D] Starting function D with y = {y}")
-    z = y * 2
-    print(f"[D] Computed z = {z} from y")
-    if z < 50:
-        print("[D] Condition true: calling E(z)")
-        E(z)  # ← CONTROL + DATA DEPENDENCY
-    else:
-        print("[D] Condition false: calling F(z)")
-        F(z)  # ← Not taken in this trace
-
-
-def E(z):
-    print(f"[E] Starting function E with z = {z}")
-    result = z - 10
-    print(f"[E] Computed result = {result} ← ERROR OBSERVED HERE!")
-    # Simulate error detection
-    if result == 12:
-        print("[E] ✅ Expected result")
-    else:
-        print("[E] ❌ Unexpected result — this is where you’d raise an error in real debugging")
-
-
-def F(z):
-    print(f"[F] Function F called with z = {z} (not executed in this trace)")
-
 # def A():
+#     print("[A] Starting function A")
 #     x = 50
-#     B(x)
+#     print(f"[A] Assigned x = {x}")
+#     if x > 5:
+#         print("[A] Condition true: calling B(x)")
+#         B(x)  # ← DATA DEPENDENCY: x passed to B
+#     else:
+#         print("[A] Condition false: calling C(x)")
+#         C(x)  # ← CONTROL + DATA DEPENDENCY (not taken here)
+
 
 # def B(k):
+#     print(f"[B] Starting function B with k = {k}")
 #     y = k + 1
-#     D(y)
+#     print(f"[B] Computed y = {y} from k")
+#     D(y)  # ← DATA DEPENDENCY: y passed to D
 
-# def D(z):
-#     return z
+
+# def C(x):
+#     print(f"[C] Function C called with x = {x} (not executed in this trace)")
+#     # Not called in this scenario — included for completeness
+
+
+# def D(y):
+#     print(f"[D] Starting function D with y = {y}")
+#     z = y * 2
+#     print(f"[D] Computed z = {z} from y")
+#     if z < 50:
+#         print("[D] Condition true: calling E(z)")
+#         E(z)  # ← CONTROL + DATA DEPENDENCY
+#     else:
+#         print("[D] Condition false: calling F(z)")
+#         F(z)  # ← Not taken in this trace
+
+
+# def E(z):
+#     print(f"[E] Starting function E with z = {z}")
+#     result = z - 10
+#     print(f"[E] Computed result = {result} ← ERROR OBSERVED HERE!")
+#     # Simulate error detection
+#     if result == 12:
+#         print("[E] ✅ Expected result")
+#     else:
+#         print("[E] ❌ Unexpected result — this is where you’d raise an error in real debugging")
+
+
+# def F(z):
+#     print(f"[F] Function F called with z = {z} (not executed in this trace)")
+
+def A():
+    x = 50
+    if x == 50:
+        x += 1
+    B(x + 1)
+
+def B(k):
+    y = k + 1
+    D(y)
+
+def D(z):
+    return z
     
 if __name__ == "__main__":
     print(">>> Executing actual functions:")
