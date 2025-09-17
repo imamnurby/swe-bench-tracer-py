@@ -270,7 +270,7 @@ class ExecutionTracer:
     def _get_current_function_name(self) -> str:
         """Get the name of the currently executing function"""
         if self.call_stack:
-            return self.call_stack[-1]['func_name']
+            return self.call_stack[-1]['qualified_name']
         return "<module>"
         
     def _get_function_info(self, frame):
@@ -473,6 +473,8 @@ class ExecutionTracer:
             self._add_trace_entry(
                 'Function',
                 frame,
+                function_name=func_info['qualified_name'],  # ← callee (correct scope)
+                caller_name=self.call_stack[-2]['qualified_name'] if len(self.call_stack) > 1 else "<module>",  # ← new field
                 parameters=parameters,
                 parameter_sources=parameter_sources,
                 inherited_control_dependencies=[
@@ -490,13 +492,23 @@ class ExecutionTracer:
 
         elif event == 'return':
             self.control_stack = []  # reset when leaving function
+            # Capture callee name BEFORE popping
+            returning_func_name = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
+            caller_name_after_return = self.call_stack[-2]['qualified_name'] if len(self.call_stack) > 1 else "<module>" if len(self.call_stack) == 1 else None
+
             if self.call_stack:
                 self.call_stack.pop()
                 if self.function_variables_stack:
                     self.function_variables_stack.pop()
                 if self.inherited_control_stack:
                     self.inherited_control_stack.pop()
-                self._add_trace_entry('Return', frame, return_value=self._serialize_value(arg))
+                self._add_trace_entry(
+                    'Return',
+                    frame,
+                    function_name=returning_func_name,   # ← callee (the one returning)
+                    caller_name=caller_name_after_return, # ← who we return to
+                    return_value=self._serialize_value(arg)
+                )
 
         elif event == 'line':
             # Update local variables first (as before)
@@ -748,7 +760,7 @@ def A():
 
 def B(k):
     y = k + 1
-    D(y)
+    return D(y)
 
 def D(z):
     return z
