@@ -8,6 +8,8 @@ from typing import Dict, Any, List, Tuple
 import re
 import copy
 import io, tokenize
+import warnings
+import traceback
 
 
 class ExecutionTracer:
@@ -68,6 +70,23 @@ class ExecutionTracer:
             'warnings', 'wave', 'weakref', '_weakrefset', 'webbrowser', 'wsgiref', 
             'xml', 'xmlrpc', 'zipapp', 'zipfile', 'zipimport', 'zoneinfo'
         }
+        
+    def __enter__(self):
+        self.start_tracing()
+        return self
+    
+    def __exit__(self, exc_type, exc_value, tb):
+        self.stop_tracing()
+        if exc_type:
+            message = f"Exception caught during tracing: {exc_type.__name__}"
+            if exc_value is not None:
+                message += f" ({exc_value})"
+            warnings.warn(message)
+            if tb is not None:
+                traceback.print_exception(exc_type, exc_value, tb)
+        # suppress exception propagation
+        # the tracer thread should not be interrupted by user code exceptions
+        return True
     
     def _get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
         """Return separate lists of variables defined and used in the statement."""
