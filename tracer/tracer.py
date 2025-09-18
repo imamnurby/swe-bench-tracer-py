@@ -680,12 +680,25 @@ class ExecutionTracer:
         elif event == 'exception':
             if self.call_stack:
                 exc_type, exc_value, exc_tb = arg
+                source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
+                offending_vars = []
+                try:
+                    words = re.findall(r"[A-Za-z_][A-Za-z_0-9]*", source_line)
+                    for name in words:
+                        if name in str(exc_value):
+                            if f"'{name}'" in str(exc_value):
+                                offending_vars.append(name)
+                except Exception:
+                        pass
+                    
                 self._add_trace_entry(
                     'Exception',
                     frame,
                     exception_type=exc_type.__name__,
-                    exception_value=str(exc_value)
+                    exception_value=str(exc_value),
+                    exception_variables=offending_vars or None
                 )
+
         return self._trace_function
     
     def start_tracing(self):
