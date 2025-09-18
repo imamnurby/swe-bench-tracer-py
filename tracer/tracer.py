@@ -350,6 +350,9 @@ class ExecutionTracer:
         self.trace_data.append(entry)
         
     def _trace_function(self, frame, event, arg):
+        if event == 'call' and frame.f_locals.get('self') is self:
+            return None
+        
         func_info = self._get_function_info(frame)
 
         if self._is_stdlib_call(func_info['filename']):
