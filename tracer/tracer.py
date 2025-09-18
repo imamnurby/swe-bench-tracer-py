@@ -107,8 +107,7 @@ class ExecutionTracer:
     def _is_control_keyword(self, line: str) -> bool:
         """Check if the stripped line starts with a control keyword."""
         keywords = (
-            'if', 'elif', 'else', 'for', 'while', 'with',
-            'try', 'except', 'finally'
+            'if', 'elif', 'else', 'for', 'while'
         )
         return line.strip().startswith(keywords)
     
@@ -532,6 +531,9 @@ class ExecutionTracer:
             line_no = frame.f_lineno
             source_line = self._get_source_line(filename, line_no)
 
+            if source_line.strip().startswith('try:'):
+                return self._trace_function
+            
             # Vars defined / used (AST)
             vars_defined, vars_used = self._get_vars_defined_and_used(source_line)
 
@@ -586,7 +588,7 @@ class ExecutionTracer:
             # For AST, var-use detection etc already uses get_vars_defined_and_used -> which uses stripped_no_comments
 
             # When deciding if this line is a control header, use stripped_no_comments
-            m = re.match(r'^(if|elif|for|while|with|try|except|finally)\b', stripped_no_comments)
+            m = re.match(r'^(if|elif|for|while|with)\b', stripped_no_comments)
             if m:
                 keyword = m.group(1)
 
@@ -599,7 +601,6 @@ class ExecutionTracer:
                         cond_m = re.match(r'^(?:if|elif|while)\s+(.*):\s*$', stripped_no_comments)
                         if cond_m:
                             cond_text = cond_m.group(1)
-                            # cond_text has had comments removed, so eval won't be broken by inline comments
                             try:
                                 cond_eval = eval(compile(cond_text, '<cond>', 'eval'),
                                                 frame.f_globals, frame.f_locals)
@@ -609,7 +610,6 @@ class ExecutionTracer:
                         else:
                             truth_value = False
                     elif keyword == 'for':
-                        # extract iterable after 'in' using stripped_no_comments
                         for_m = re.match(r'^for\s+.*\s+in\s+(.*):\s*$', stripped_no_comments)
                         if for_m:
                             iterable_text = for_m.group(1)
@@ -622,8 +622,6 @@ class ExecutionTracer:
                         else:
                             truth_value = False
                     elif keyword == 'with':
-                        truth_value = True
-                    elif keyword in ('try', 'except', 'finally'):
                         truth_value = True
                 except Exception:
                     truth_value = False
@@ -646,7 +644,6 @@ class ExecutionTracer:
                 if vars_defined:
                     cur_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
                     for v in vars_defined:
-                        # event id of the Line event we just added is self.event_id - 1
                         self.last_def_event[cur_qualified][v] = self.event_id - 1
 
                 # Now push the control entry using the event id assigned above
