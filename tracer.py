@@ -753,22 +753,80 @@ class ExecutionTracer:
 #     print(f"[F] Function F called with z = {z} (not executed in this trace)")
 
 def A():
-    x = 50
-    if x == 50:
-        x += 1
-    B(x + 1)
+    x = 0
+    C(x)
 
 def B(k):
-    y = k + 1
-    return D(y)
+    return k + 100 
 
-def D(z):
-    return z
+def C(z):
+    z = B(z)
+    if z == 150:
+        return z
+    else:
+        return D(z)
+
+def D(y):
+    return y - 50
     
+
+# def main():
+#     a = 10
+#     result = process_list(a)
+#     print("Result:", result)  # Should be 310
+
+# def process_list(n):
+#     total = 0
+#     items = get_items(n)  # returns [n, n+1, n+2]
+#     for i in range(len(items)):
+#         val = items[i]
+#         if val > 0:
+#             if val % 2 == 0:
+#                 total += transform_even(val)
+#             else:
+#                 total += transform_odd(val)
+#     return total
+
+# def get_items(x):
+#     return [x, x + 1, x + 2]
+
+# def transform_even(x):
+#     return x * 10
+
+# def transform_odd(x):
+#     return x * 5 + 50
+
+def main():
+    a = 10
+    result = process_list(a)
+    print("Result:", result)  # BUG: prints 245
+
+def process_list(n):
+    total = 0
+    items = get_items(n)
+    for i in range(len(items)):
+        val = items[i]
+        if i > 0:            # 🐞 BUG: should be `if val > 0`
+            if val % 2 == 0:
+                total += transform_even(val)
+            else:
+                total += transform_odd(val)
+    return total
+
+# Same helper functions
+def get_items(x):
+    return [x, x + 1, x + 2]
+
+def transform_even(x):
+    return x * 10
+
+def transform_odd(x):
+    return x * 5 + 50
+
 if __name__ == "__main__":
     print(">>> Executing actual functions:")
     
-    tracer = ExecutionTracer(output_file="demonstration_trace.jsonl")
+    tracer = ExecutionTracer(output_file="demonstration_trace_B_.jsonl")
     
     # 2. Start tracing
     print("\nStarting tracer...")
@@ -777,6 +835,7 @@ if __name__ == "__main__":
     # 3. Run the target code
     # Using a try/finally block ensures tracing is stopped even if an error occurs
     try:
+        # main()
         A()
     except Exception as e:
         print(f"An error occurred: {e}")
