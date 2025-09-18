@@ -22,6 +22,7 @@ class ExecutionTracer:
         self.event_id = 0
         self.control_stack = []
         self.inherited_control_stack = []
+        self.control_stack_stack = []  # Stack for managing control_stack across calls
         
         # Map: qualified_function_name -> { var_name -> last_def_event_id }
         # This is used to track where variables were last defined (per-function)
@@ -362,6 +363,7 @@ class ExecutionTracer:
             if self.inherited_control_stack:
                 caller_snapshot.extend([dict(e) for e in self.inherited_control_stack[-1]])
             self.inherited_control_stack.append(caller_snapshot)
+            self.control_stack_stack.append(self.control_stack) # Save the caller's stack
             self.control_stack = []  # reset on new function entry
 
             # --- existing call handling unchanged (depth / vars stack) ---
@@ -494,7 +496,10 @@ class ExecutionTracer:
                 self.last_def_event[callee_qualified][pname] = self.event_id - 1
 
         elif event == 'return':
-            self.control_stack = []  # reset when leaving function
+            if self.control_stack_stack:
+                self.control_stack = self.control_stack_stack.pop() # Restore caller's stack
+            else:
+                self.control_stack = [] # Fallback for safety
             # Capture callee name BEFORE popping
             returning_func_name = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
             caller_name_after_return = self.call_stack[-2]['qualified_name'] if len(self.call_stack) > 1 else "<module>" if len(self.call_stack) == 1 else None
