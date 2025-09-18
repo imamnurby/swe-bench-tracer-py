@@ -27,6 +27,10 @@ class ExecutionTracer:
         # This is used to track where variables were last defined (per-function)
         self.last_def_event = defaultdict(dict)
         
+        # Keep track of the most recent Line event per frame so we can
+        # fill in seen_variables AFTER the line executes.
+        self._pending_line_events = {}
+        
         # Stack of variable dictionaries, one per function call
         self.function_variables_stack = []
         
@@ -498,6 +502,12 @@ class ExecutionTracer:
 
             if self.call_stack:
                 self.call_stack.pop()
+                
+                # Finalize any last line still pending for this frame
+                if frame in self._pending_line_events:
+                    prev_event = self._pending_line_events.pop(frame)
+                    prev_event['seen_variables'] = self._serialize_value(dict(frame.f_locals))
+                
                 if self.function_variables_stack:
                     self.function_variables_stack.pop()
                 if self.inherited_control_stack:
@@ -511,6 +521,11 @@ class ExecutionTracer:
                 )
 
         elif event == 'line':
+            if frame in self._pending_line_events:
+                prev_event = self._pending_line_events.pop(frame)
+                # capture the now-up-to-date locals
+                prev_event['seen_variables'] = self._serialize_value(dict(frame.f_locals))
+                
             # Update local variables first (as before)
             self._update_function_variables(frame)
             filename = frame.f_code.co_filename
@@ -624,6 +639,8 @@ class ExecutionTracer:
                     inherited_control_dependencies=inherited_ids,
                     seen_variables=seen_variables
                 )
+                
+                self._pending_line_events[frame] = self.trace_data[-1]
 
                 # Record last-definition event ids for any variables defined on this line
                 if vars_defined:
@@ -651,6 +668,8 @@ class ExecutionTracer:
                     inherited_control_dependencies=inherited_ids,
                     seen_variables=seen_variables
                 )
+                
+                self._pending_line_events[frame] = self.trace_data[-1]
 
                 # Record last-definition event ids for any variables defined on this line
                 if vars_defined:
@@ -753,7 +772,7 @@ class ExecutionTracer:
 #     print(f"[F] Function F called with z = {z} (not executed in this trace)")
 
 def A():
-    x = 0
+    x = 50
     C(x)
 
 def B(k):
@@ -797,7 +816,7 @@ def D(y):
 #     return x * 5 + 50
 
 def main():
-    a = 10
+    a = 50
     result = process_list(a)
     print("Result:", result)  # BUG: prints 245
 
@@ -826,7 +845,7 @@ def transform_odd(x):
 if __name__ == "__main__":
     print(">>> Executing actual functions:")
     
-    tracer = ExecutionTracer(output_file="demonstration_trace_B_.jsonl")
+    tracer = ExecutionTracer(output_file="test.jsonl")
     
     # 2. Start tracing
     print("\nStarting tracer...")
