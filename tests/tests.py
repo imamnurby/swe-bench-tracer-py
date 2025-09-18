@@ -1,5 +1,6 @@
 from tracer import ExecutionTracer
 from pathlib import Path
+import json
 
 def test_simple_if(x):
     if x > 0:
@@ -105,6 +106,150 @@ def top_level():
         res = wrapper(val)
         results.append(res)
     return results
+
+def assert_events_equal(ground_truth_event, actual_event, event_id):
+    """
+    Assert that two trace events are equal, field by field.
+    For list fields (except control_dependencies and inherited_control_dependencies):
+      - Convert all elements to string
+      - Sort lexicographically
+    Handles dicts recursively.
+    """
+    fields_to_check = [
+        "event_type",
+        # "line_number",
+        "statement",
+        "filepath",
+        "function_name",
+        "caller_name",
+        "return_value",
+        "parameters",
+        "parameter_sources",
+        "vars_defined",
+        "vars_used",
+        "control_dependencies",
+        "inherited_control_dependencies",
+        "seen_variables",
+    ]
+
+    for field in fields_to_check:
+        gt_val = ground_truth_event.get(field)
+        act_val = actual_event.get(field)
+
+        # Skip if both are None (optional fields)
+        if gt_val is None and act_val is None:
+            continue
+
+        # Type check
+        assert type(gt_val) == type(act_val), (
+            f"Event {event_id}, field '{field}': type mismatch. "
+            f"GT: {type(gt_val)}, Actual: {type(act_val)}"
+        )
+
+        # Handle lists — sort after converting to string, unless control-related
+        if isinstance(gt_val, list):
+            assert len(gt_val) == len(act_val), (
+                f"Event {event_id}, field '{field}': length mismatch. "
+                f"GT: {len(gt_val)}, Actual: {len(act_val)}"
+            )
+
+            if field not in ["control_dependencies", "inherited_control_dependencies"]:
+                # Convert all elements to string, then sort
+                gt_sorted = sorted(str(x) for x in gt_val)
+                act_sorted = sorted(str(x) for x in act_val)
+            else:
+                # Preserve order for control dependencies
+                gt_sorted = gt_val
+                act_sorted = act_val
+
+            for i, (gt_item, act_item) in enumerate(zip(gt_sorted, act_sorted)):
+                # Compare as strings for sortable fields
+                if field not in ["control_dependencies", "inherited_control_dependencies"]:
+                    gt_str = str(gt_item)
+                    act_str = str(act_item)
+                    assert gt_str == act_str, (
+                        f"Event {event_id}, field '{field}[{i}]': "
+                        f"GT: {gt_str}, Actual: {act_str}"
+                    )
+                else:
+                    # Compare original values for control dependencies
+                    assert gt_item == act_item, (
+                        f"Event {event_id}, field '{field}[{i}]': "
+                        f"GT: {gt_item}, Actual: {act_item}"
+                    )
+
+        # Handle dicts
+        elif isinstance(gt_val, dict):
+            assert set(gt_val.keys()) == set(act_val.keys()), (
+                f"Event {event_id}, field '{field}': keys mismatch. "
+                f"GT: {set(gt_val.keys())}, Actual: {set(act_val.keys())}"
+            )
+            for key in gt_val:
+                gt_item = gt_val[key]
+                act_item = act_val[key]
+
+                # If value is a list (and not inside control field — which it won’t be in seen_variables),
+                # convert to string and sort before comparing
+                if isinstance(gt_item, list):
+                    gt_sorted = sorted(str(x) for x in gt_item)
+                    act_sorted = sorted(str(x) for x in act_item)
+                    assert gt_sorted == act_sorted, (
+                        f"Event {event_id}, field '{field}[{key}]': sorted string mismatch. "
+                        f"GT: {gt_sorted}, Actual: {act_sorted}"
+                    )
+                else:
+                    assert gt_item == act_item, (
+                        f"Event {event_id}, field '{field}[{key}]': "
+                        f"GT: {gt_item}, Actual: {act_item}"
+                    )
+
+        # Handle primitives
+        else:
+            # Convert to string for comparison? Only if you want string-based equality.
+            # But for primitives like int/bool/str, direct == is usually fine.
+            # Let's keep original comparison unless you specify otherwise.
+            assert gt_val == act_val, (
+                f"Event {event_id}, field '{field}': "
+                f"GT: {gt_val}, Actual: {act_val}"
+            )
+
+def validate_traces_against_ground_truth(ground_truth_dir, actual_traces_dir=None):
+    """
+    Load all ground truth trace files and compare against actual traces.
+    If actual_traces_dir is None, you can plug in your own trace loader later.
+    """
+    ground_truth_path = Path(ground_truth_dir)
+
+    for gt_file in ground_truth_path.glob("*.jsonl"):
+        print(f"\nValidating: {gt_file.name}")
+
+        # TODO: You need to map ground truth file to actual trace file
+        # For now, assume actual trace file has same name in actual_traces_dir
+        if actual_traces_dir:
+            actual_file = Path(actual_traces_dir) / gt_file.name
+            if not actual_file.exists():
+                raise FileNotFoundError(f"Actual trace not found: {actual_file}")
+        else:
+            # ⚠️ PLACEHOLDER: Later, you'll load actual trace from memory or another source
+            # For demo, we'll just re-use ground truth as "actual" to show it works
+            actual_file = gt_file
+
+        with open(gt_file, 'r') as gt_f, open(actual_file, 'r') as act_f:
+            gt_lines = gt_f.readlines()
+            act_lines = act_f.readlines()
+
+            assert len(gt_lines) == len(act_lines), (
+                f"Mismatch in number of events in {gt_file.name}: "
+                f"GT: {len(gt_lines)}, Actual: {len(act_lines)}"
+            )
+
+            for i, (gt_line, act_line) in enumerate(zip(gt_lines, act_lines)):
+                gt_event = json.loads(gt_line.strip())
+                act_event = json.loads(act_line.strip())
+
+                assert_events_equal(gt_event, act_event, i)
+
+        print(f"✅ {gt_file.name} passed all assertions.")
 
 
 if __name__ == "__main__":
@@ -499,3 +644,8 @@ if __name__ == "__main__":
     finally:
         tracer.stop_tracing()
         tracer.save_trace()
+        
+    validate_traces_against_ground_truth(
+        ground_truth_dir="./ground_truths",
+        actual_traces_dir="./results"
+    )
