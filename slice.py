@@ -1,4 +1,7 @@
-def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
+import json
+from typing import List
+
+def backward_slice(trace: List[str], start_event_id: int, target_vars: List[str]) -> List[str]:
     """
     Performs backward dynamic slicing on an execution trace.
 
@@ -9,7 +12,7 @@ def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
     Args:
         trace: List of event dictionaries from execution trace.
         start_event_id: The event ID where the slicing starts (e.g., where an error was observed).
-        target_var: The variable of interest whose influencing statements we want to find.
+        target_vars: The list of variables of interest whose influencing statements we want to find.
 
     Returns:
         List of event dictionaries that form the dynamic backward slice.
@@ -19,7 +22,7 @@ def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
     trace_indexed = {event['event_id']: event for event in trace}
 
     # Initialize algorithm state
-    influencing_vars = {target_var}
+    influencing_vars = set(target_vars)
     control_dependent_events = {start_event_id}  # start event may need control explanation
     slice_result = []
 
@@ -91,8 +94,6 @@ def backward_slice(trace: list, start_event_id: int, target_var: str) -> list:
 
     return slice_result
 
-import json
-
 def read_trace_from_jsonl(jsonl_path: str) -> list:
     """
     Reads an execution trace from a .jsonl file.
@@ -113,26 +114,77 @@ def read_trace_from_jsonl(jsonl_path: str) -> list:
                 trace.append(event)
     return trace
 
+def infer_slicing_criteria(trace: List[str], start_event_id: int, target_vars: List[str]):
+    """
+    Infers the slicing criteria (start_event_id and target_vars) if they are not provided.
 
-def main():
-    # --- CONFIGURE THESE VALUES ---
-    jsonl_file_path = "/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/demonstration_trace.jsonl"      # Path to your .jsonl trace file
-    start_event_id = 6                  # Example: event ID where error was observed
-    target_var = "k"                     # Example: variable of interest
+    - If start_event_id is None, it defaults to the last event in the trace.
+    - If target_vars is None, it searches backwards from the start_event_id
+      to find the first event with 'vars_used'.
 
+    Args:
+        trace: The full execution trace.
+        start_event_id: The starting event ID (can be None).
+        target_vars: The target variables (can be None).
+
+    Returns:
+        A tuple (final_start_event_id, final_target_vars).
+        Returns (None, None) if criteria cannot be inferred.
+    """
+    if not trace:
+        print("Trace is empty. Cannot infer slicing criteria.")
+        return None, None
+
+    # Infer start_event_id if not provided
+    if start_event_id is None:
+        start_event_id = trace[-1]['event_id']
+        print(f"No start_event_id provided. Defaulting to the last event: {start_event_id}")
+
+    # Infer target_vars if not provided
+    if target_vars is None:
+        print("No target_vars provided. Searching backwards for the first event with 'vars_used'...")
+        
+        # Index trace by event_id for fast lookup
+        trace_indexed = {event['event_id']: event for event in trace}
+        
+        inferred = False
+        # Start searching from the current start_event_id backwards
+        for i in range(start_event_id, -1, -1):
+            event = trace_indexed.get(i)
+            if event and event.get('vars_used'):
+                target_vars = event.get('vars_used')
+                start_event_id = event['event_id']  # This becomes our new, precise start point
+                print(f"Found slicing criteria at event {start_event_id}: target_vars = {target_vars}")
+                inferred = True
+                break
+        
+        if not inferred:
+            print("Could not infer target_vars. No event with 'vars_used' found in the trace.")
+            return None, None
+
+    return start_event_id, target_vars
+
+
+def execute_backward_slice(jsonl_file_path: str, start_event_id: int, target_vars: List[str])->List[str]:
     # --- READ TRACE ---
     trace = read_trace_from_jsonl(jsonl_file_path)
 
-    # --- PERFORM BACKWARD SLICING ---
-    slice_result = backward_slice(trace, start_event_id, target_var)
+    # --- INFER SLICING CRITERIA IF NOT PROVIDED ---
+    start_event_id, target_vars = infer_slicing_criteria(trace, start_event_id, target_vars)
+
+    if start_event_id is None or target_vars is None:
+        print("Could not determine slicing criteria. Exiting.")
+        return
+
+    # Ensure target_vars is a list, as backward_slice expects it
+    if isinstance(target_vars, str):
+        target_vars = [target_vars]
+        
+    slice_result = backward_slice(trace, start_event_id, target_vars)
 
     # --- OUTPUT RESULT ---
-    print(f"Backward slice contains {len(slice_result)} events:")
+    print(f"\nBackward slice for {target_vars} starting from event {start_event_id} contains {len(slice_result)} events:")
     for event in slice_result:
         print(event)
-
-
-# Assuming backward_slice is defined above or imported.
-# If running as script, uncomment the line below:
-if __name__ == "__main__":
-    main()
+    
+    return slice_result
