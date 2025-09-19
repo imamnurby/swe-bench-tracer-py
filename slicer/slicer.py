@@ -181,7 +181,7 @@ def execute_backward_slice(jsonl_file_path: str, start_event_id: int, target_var
     trace = read_trace_from_jsonl(jsonl_file_path)
 
     # --- INFER SLICING CRITERIA IF NOT PROVIDED ---
-    start_event_id, target_vars = infer_slicing_criteria_from_event_type(trace, start_event_id, target_vars)
+    start_event_id, target_vars, statement, function_name, filepath = infer_slicing_criteria_from_event_type(trace, start_event_id, target_vars)
 
     if start_event_id is None or target_vars is None:
         print("Could not determine slicing criteria. Exiting.")
