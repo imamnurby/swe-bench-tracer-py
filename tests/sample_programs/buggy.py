@@ -8,18 +8,6 @@ class SimpleClass:
             category = "non-positive"
         return category
 
-def test_class_method():
-    obj = SimpleClass()
-    return obj.classify(5)
-
-
-def initialize_and_use():
-    """Initialize object, call method, and perform operation on output."""
-    obj = SimpleClass()                  # Initialize object
-    result = obj.classify(-3)            # Call method
-    processed = f"Category: {result.upper()}"  # Operation: uppercase + formatting
-    return processed
-
 def initialize_and_use_with_input(x):
     """Version that accepts input for more flexible testing."""
     obj = SimpleClass()
