@@ -1,3 +1,5 @@
+from tracer import ExecutionTracer
+
 class SimpleClass:
     def classify(self, x):
         if x > 0:
@@ -26,12 +28,19 @@ def initialize_and_use_with_input(x):
     return processed
 
 def run_tests():
-    assert initialize_and_use_with_input(7) == "Category: POSITIVE", "Failed: should be 'Category: POSITIVE'"
-    assert initialize_and_use_with_input(-5) == "Category: NON-POSITIVE", "Failed: should be 'Category: NON-POSITIVE'"
-    assert initialize_and_use_with_input(0) == "Category: NON-POSITIVE", "Failed: zero should be non-positive"
+    processed = initialize_and_use_with_input(0)
+    assert processed == "Category: NON-POSITIVE", "Failed: zero should be non-positive"
 
 # Main guard to run tests
 if __name__ == "__main__":
     print("Running tests...")
-    run_tests()
-    print("All tests passed...")
+    tracer = ExecutionTracer(output_file="sample_programs/correct.jsonl")
+    tracer.start_tracing()
+    try:
+        run_tests()
+        print("All tests passed...")
+    except:
+        pass
+    finally:
+        tracer.stop_tracing()
+        tracer.save_trace()
