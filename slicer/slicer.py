@@ -114,55 +114,66 @@ def read_trace_from_jsonl(jsonl_path: str) -> list:
                 trace.append(event)
     return trace
 
-def infer_slicing_criteria(trace: List[str], start_event_id: int, target_vars: List[str]):
+def infer_slicing_criteria_from_event_type(trace: List[str], target_event_type: str):
     """
-    Infers the slicing criteria (start_event_id and target_vars) if they are not provided.
+    Infers slicing criteria by finding a relevant event in the trace.
 
-    - If start_event_id is None, it defaults to the last event in the trace.
-    - If target_vars is None, it searches backwards from the start_event_id
-      to find the first event with 'vars_used'.
+    The process is as follows:
+    1. Find an anchor event:
+    2. Find the slicing event:
+       - Search backwards from the anchor event to find the first event with a
+         non-empty 'vars_used' list. This becomes the slicing event.
 
     Args:
         trace: The full execution trace.
-        start_event_id: The starting event ID (can be None).
-        target_vars: The target variables (can be None).
+        target_event_type: The type of event to search for (e.g., "Exception").
 
     Returns:
-        A tuple (final_start_event_id, final_target_vars).
-        Returns (None, None) if criteria cannot be inferred.
+        A tuple (event_id, target_vars, statement, function_name, filepath).
+        Returns (None, None, None, None, None) if criteria cannot be inferred.
     """
     if not trace:
         print("Trace is empty. Cannot infer slicing criteria.")
-        return None, None
+        return None, None, None, None, None
 
-    # Infer start_event_id if not provided
-    if start_event_id is None:
-        start_event_id = trace[-1]['event_id']
-        print(f"No start_event_id provided. Defaulting to the last event: {start_event_id}")
+    # Part 1: Find the anchor event
+    anchor_event = None
+    print(f"Searching backwards for the latest event of type '{target_event_type}'...")
+    for event in reversed(trace):
+        if event.get('event_type') == target_event_type:
+            anchor_event = event
+            break
+    if not anchor_event:
+        print(f"Error: No event of type '{target_event_type}' found in the trace.")
+        return None, None, None, None, None
+    
+    print(f"Anchor event found: ID {anchor_event['event_id']}, Type '{anchor_event['event_type']}'")
+    start_event_id = anchor_event['event_id']
 
-    # Infer target_vars if not provided
-    if target_vars is None:
-        print("No target_vars provided. Searching backwards for the first event with 'vars_used'...")
-        
-        # Index trace by event_id for fast lookup
-        trace_indexed = {event['event_id']: event for event in trace}
-        
-        inferred = False
-        # Start searching from the current start_event_id backwards
-        for i in range(start_event_id, -1, -1):
-            event = trace_indexed.get(i)
-            if event and event.get('vars_used'):
-                target_vars = event.get('vars_used')
-                start_event_id = event['event_id']  # This becomes our new, precise start point
-                print(f"Found slicing criteria at event {start_event_id}: target_vars = {target_vars}")
-                inferred = True
-                break
-        
-        if not inferred:
-            print("Could not infer target_vars. No event with 'vars_used' found in the trace.")
-            return None, None
-
-    return start_event_id, target_vars
+    # Part 2: Find the slicing event and its criteria
+    # Part 2: Find the slicing event and its criteria
+    print("Searching backwards from anchor event for the first event with 'vars_used'...")
+    
+    # Index trace by event_id for fast lookup
+    trace_indexed = {event['event_id']: event for event in trace}
+    
+    # Start searching from the anchor_event's id backwards
+    for i in range(start_event_id, -1, -1):
+        event = trace_indexed.get(i)
+        # Check for a non-empty vars_used list
+        if event and event.get('vars_used'):
+            final_event_id = event['event_id']
+            final_target_vars = event['vars_used']
+            statement = event.get('statement', '')
+            function_name = event.get('function_name', '')
+            filepath = event.get('filepath', '')
+            
+            print(f"Found slicing criteria at event {final_event_id}: target_vars = {final_target_vars}")
+            return final_event_id, final_target_vars, statement, function_name, filepath
+    
+    # If no event with 'vars_used' was found
+    print("Could not infer slicing criteria. No event with 'vars_used' found backwards from the anchor.")
+    return None, None, None, None, None
 
 
 def execute_backward_slice(jsonl_file_path: str, start_event_id: int, target_vars: List[str])->List[str]:
@@ -170,7 +181,7 @@ def execute_backward_slice(jsonl_file_path: str, start_event_id: int, target_var
     trace = read_trace_from_jsonl(jsonl_file_path)
 
     # --- INFER SLICING CRITERIA IF NOT PROVIDED ---
-    start_event_id, target_vars = infer_slicing_criteria(trace, start_event_id, target_vars)
+    start_event_id, target_vars = infer_slicing_criteria_from_event_type(trace, start_event_id, target_vars)
 
     if start_event_id is None or target_vars is None:
         print("Could not determine slicing criteria. Exiting.")
