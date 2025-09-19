@@ -198,4 +198,4 @@ def execute_backward_slice_for_buggy_code(jsonl_file_path: str, target_event_typ
     for event in slice_result:
         print(event)
     
-    return slice_result
+    return slice_result, statement, function_name, filepath
