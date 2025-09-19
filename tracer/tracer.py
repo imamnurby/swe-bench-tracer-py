@@ -685,14 +685,14 @@ class ExecutionTracer:
             if self.call_stack:
                 exc_type, exc_value, exc_tb = arg
                 source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
-                _, offending_vars = self._get_vars_defined_and_used(source_line)
+                _, vars_used = self._get_vars_defined_and_used(source_line)
                     
                 self._add_trace_entry(
                     'Exception',
                     frame,
                     exception_type=exc_type.__name__,
                     exception_value=str(exc_value),
-                    exception_variables=offending_vars or None
+                    vars_used=vars_used or None
                 )
 
         return self._trace_function
