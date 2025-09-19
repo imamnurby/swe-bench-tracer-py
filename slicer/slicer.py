@@ -193,9 +193,4 @@ def execute_backward_slice_for_buggy_code(jsonl_file_path: str, target_event_typ
         
     slice_result = backward_slice(trace, start_event_id, target_vars)
 
-    # --- OUTPUT RESULT ---
-    print(f"\nBackward slice for {target_vars} starting from event {start_event_id} contains {len(slice_result)} events:")
-    for event in slice_result:
-        print(event)
-    
     return slice_result, statement, function_name, filepath
