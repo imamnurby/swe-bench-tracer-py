@@ -177,19 +177,33 @@ def infer_slicing_criteria_from_event_type(trace: List[str], target_event_type: 
 
 
 def execute_backward_slice_for_buggy_code(jsonl_file_path: str, target_event_type: str)->List[str]:
-    # --- READ TRACE ---
+    """
+    Executes a backward program slice on a trace from a buggy code execution.
+    Args:
+        jsonl_file_path (str): The path to the JSONL file containing the
+            execution trace.
+        target_event_type (str): The type of event to use as an anchor for
+            inferring the slicing criteria. For example, 'Exception'.
+
+    Returns:
+        tuple: A tuple containing four elements:
+            - slice_result (List[Dict]): The backward slice, which is a list of
+              the relevant trace events.
+            - statement (str): The source code statement from which the slice
+              was initiated.
+            - function_name (str): The name of the function containing the
+              slicing statement.
+            - filepath (str): The path to the source file containing the
+              slicing statement.
+        Returns None if the slicing criteria cannot be successfully inferred.
+    """
     trace = read_trace_from_jsonl(jsonl_file_path)
 
-    # --- INFER SLICING CRITERIA IF NOT PROVIDED ---
     start_event_id, target_vars, statement, function_name, filepath = infer_slicing_criteria_from_event_type(trace, target_event_type)
 
     if start_event_id is None or target_vars is None:
         print("Could not determine slicing criteria. Exiting.")
         return
-
-    # Ensure target_vars is a list, as backward_slice expects it
-    if isinstance(target_vars, str):
-        target_vars = [target_vars]
         
     slice_result = backward_slice(trace, start_event_id, target_vars)
 
