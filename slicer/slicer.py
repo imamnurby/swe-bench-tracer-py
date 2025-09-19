@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import List, Dict
 
 def backward_slice(trace: List[str], start_event_id: int, target_vars: List[str]) -> List[str]:
     """
@@ -208,3 +208,70 @@ def execute_backward_slice_for_buggy_code(jsonl_file_path: str, target_event_typ
     slice_result = backward_slice(trace, start_event_id, target_vars)
 
     return slice_result, statement, function_name, filepath
+
+def infer_slicing_criteria_from_statement(trace: List[dict], target_filepath: str, target_function_name: str, target_statement: str) -> Dict:
+    """
+    Searches a trace backwards for a specific statement to use as a slicing criterion.
+
+    Args:
+        trace (List[dict]): The full execution trace.
+        target_filepath (str): The absolute path of the source file to search for.
+        target_function_name (str): The name of the function to search within.
+        target_statement (str): The source code of the statement to find.
+            Whitespace is stripped for comparison.
+
+    Returns:
+        dict: The complete event dictionary of the found slicing event, or None
+              if no matching event was found.
+    """
+    print(f"Searching for statement: '{target_statement.strip()}' in {target_function_name}")
+    
+    for event in reversed(trace):
+        # Check for all criteria in a single condition
+        if (event.get('vars_used') and
+            event.get('filepath') == target_filepath and
+            event.get('function_name') == target_function_name and
+            event.get('statement', '').strip() == target_statement.strip()):
+            
+            print(f"Found matching event for slicing at ID: {event['event_id']}")
+            return event
+
+    return None
+
+def execute_backward_slice_for_correct_code(jsonl_filepath: str, target_filepath: str, target_function_name: str, target_statement: str)->List[Dict]:
+    """
+    Finds the last execution of a specific line of code and performs a backward slice.
+
+    Args:
+        jsonl_filepath (str): The path to the JSONL file containing the
+            execution trace.
+        target_filepath (str): The absolute path of the source file to search for.
+        target_function_name (str): The name of the function to search within.
+        target_statement (str): The exact source code of the statement to find.
+            Whitespace will be stripped for comparison.
+
+    Returns:
+        List[Dict]: The backward slice, which is a list of the relevant trace
+        events. Returns None if no matching event could be found in the trace.
+    """
+    trace = read_trace_from_jsonl(jsonl_filepath)
+    if not trace:
+        print("Trace is empty or could not be read.")
+        return None
+
+    slicing_event = infer_slicing_criteria_from_statement(
+        trace, target_filepath, target_function_name, target_statement
+    )
+    
+    if slicing_event:
+        start_event_id = slicing_event['event_id']
+        target_vars = slicing_event['vars_used']
+        
+        if isinstance(target_vars, str):
+            target_vars = [target_vars]
+
+        slice_result = backward_slice(trace, start_event_id, target_vars)
+        return slice_result
+    else:
+        print("Could not find a matching event with the specified criteria and non-empty 'vars_used'.")
+        return None
