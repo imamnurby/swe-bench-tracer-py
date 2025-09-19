@@ -1,95 +1,136 @@
 import json
 from typing import List, Dict, Tuple
 
-def backward_slice(trace: List[str], start_event_id: int, target_vars: List[str]) -> List[str]:
+def map_call_sites_to_return_events(trace: List[Dict]) -> Dict[int, Dict]:
     """
-    Performs backward dynamic slicing on an execution trace.
+    Creates a mapping from a call site event ID to its corresponding 'Return' event.
 
-    Now considers both direct and inherited control dependencies.
-    Also ensures the start event is considered for control dependency resolution,
-    even if it doesn't define the target variable.
+    This is essential for tracing data dependencies from a function's return value
+    back to the variable it's assigned to at the call site.
+
+    It works by:
+    1. Using a stack to pair 'Function' entry events with their 'Return' events.
+    2. Assuming the line event that performs the call occurs immediately before
+       the corresponding 'Function' entry event in the trace.
+
+    Args:
+        trace: The full execution trace.
+
+    Returns:
+        A dictionary where keys are the event_id of a 'Line' event that calls a function,
+        and values are the corresponding 'Return' event dictionary for that function call.
+    """
+    call_stack = []
+    func_event_to_return_map = {}
+
+    for event in trace:
+        if event['event_type'] == 'Function':
+            call_stack.append(event['event_id'])
+        elif event['event_type'] == 'Return':
+            if call_stack:
+                func_event_id = call_stack.pop()
+                func_event_to_return_map[func_event_id] = event
+
+    call_site_to_return_map = {}
+    for func_event_id, return_event in func_event_to_return_map.items():
+        if func_event_id > 0:
+            # The line event making the call is assumed to be right before the function entry event
+            call_site_event_id = func_event_id - 1
+            call_site_to_return_map[call_site_event_id] = return_event
+
+    return call_site_to_return_map
+
+def backward_slice(trace: List[Dict], start_event_id: int, target_vars: List[str]) -> List[Dict]:
+    """
+    Performs backward dynamic slicing on an execution trace using a multi-pass approach
+    to correctly handle interprocedural data dependencies.
 
     Args:
         trace: List of event dictionaries from execution trace.
-        start_event_id: The event ID where the slicing starts (e.g., where an error was observed).
-        target_vars: The list of variables of interest whose influencing statements we want to find.
+        start_event_id: The event ID where the slicing starts.
+        target_vars: The initial list of variables of interest.
 
     Returns:
-        List of event dictionaries that form the dynamic backward slice.
-        Events are included in the order they were encountered during backward traversal.
+        List of event dictionaries that form the dynamic backward slice, ordered
+        from the most recent event to the oldest.
     """
-    # Index trace by event_id for fast lookup
     trace_indexed = {event['event_id']: event for event in trace}
+    call_site_to_return_map = map_call_sites_to_return_events(trace)
+    
+    cumulative_influencing_vars = set(target_vars)
+    slice_event_ids = set()
+    
+    # --- Multi-Pass Slicing Loop ---
+    # This loop continues until a full backward pass finds no new influential variables.
+    # The main idea is we try to do the backward pass multiple times, each time we record the influencing variables to newly_discovered_vars
+    while True:
+        pass_influencing_vars = cumulative_influencing_vars.copy()
+        newly_discovered_vars = set()
+        
+        # We start each pass with the same initial control dependency.
+        control_dependent_events = {start_event_id}
+        
+        # --- Single Backward Pass ---
+        for current_id in range(start_event_id, -1, -1):
+            stmt = trace_indexed[current_id]
 
-    # Initialize algorithm state
-    influencing_vars = set(target_vars)
-    control_dependent_events = {start_event_id}  # start event may need control explanation
-    slice_result = []
+            # Criteria for including the current statement in the slice
+            is_data_dependent = False
+            is_control_dependent = False
 
-    # Start from start_event_id and go backward to event_id 0
-    current_id = start_event_id
+            # 1. Dynamic Data Dependency Check
+            vars_defined = set(stmt.get('vars_defined', []))
+            if vars_defined & pass_influencing_vars:
+                is_data_dependent = True
+                pass_influencing_vars -= vars_defined
+                vars_used = stmt.get('vars_used', [])
+                pass_influencing_vars.update(vars_used)
+                newly_discovered_vars.update(vars_used)
+                
+                # Check for interprocedural data dependency through function returns
+                if current_id in call_site_to_return_map:
+                    return_event = call_site_to_return_map[current_id]
+                    return_vars_used = return_event.get('vars_used', [])
+                    pass_influencing_vars.update(return_vars_used)
+                    newly_discovered_vars.update(return_vars_used)
 
-    while current_id >= 0:
-        stmt = trace_indexed[current_id]
+            # 2. Dynamic Control Dependency Check
+            dependent_events_to_remove = set()
+            for dep_id in control_dependent_events:
+                dep_event = trace_indexed[dep_id]
+                all_ctrl_deps = set(dep_event.get('control_dependencies', [])) | \
+                               set(dep_event.get('inherited_control_dependencies', []))
+                if current_id in all_ctrl_deps or -current_id in all_ctrl_deps:
+                    is_control_dependent = True
+                    dependent_events_to_remove.add(dep_id)
+            
+            if is_control_dependent:
+                control_dependent_events -= dependent_events_to_remove
+                vars_used = stmt.get('vars_used', [])
+                pass_influencing_vars.update(vars_used)
+                newly_discovered_vars.update(vars_used)
 
-        # Check if we should terminate early
-        if len(influencing_vars) == 0 and len(control_dependent_events) == 0:
+            # Add statement to slice if it meets either criterion
+            if is_data_dependent or is_control_dependent:
+                slice_event_ids.add(current_id)
+                control_dependent_events.add(current_id) # The statement itself becomes a point of control interest
+
+        # --- Check for Convergence ---
+        # If this pass did not add any new variables to our cumulative set, we are done.
+        if not (newly_discovered_vars - cumulative_influencing_vars):
             break
+        
+        # Otherwise, update the cumulative set and run another pass.
+        cumulative_influencing_vars.update(newly_discovered_vars)
 
-        # --- 1. Interprocedural Data Dependency Check ---
-        if stmt['event_type'] == 'Function':
-            parameters = stmt.get('parameters', {})
-            param_sources = stmt.get('parameter_sources', {})
-            matched_params = influencing_vars & set(parameters.keys())
-
-            for param in matched_params:
-                sources = param_sources.get(param, [])
-                if isinstance(sources, dict):
-                    sources = [sources]
-                elif not isinstance(sources, list):
-                    sources = []
-
-                for source_info in sources:
-                    if isinstance(source_info, dict) and 'var' in source_info:
-                        source_var = source_info['var']
-                        influencing_vars.add(source_var)
-
-                # Include this Function event in the slice — it’s part of the data flow
-                slice_result.append(stmt)
-                control_dependent_events.add(current_id)
-
-        # --- 2. Dynamic Data Dependency Check ---
-        vars_defined = set(stmt.get('vars_defined', []))
-        if vars_defined & influencing_vars:
-            influencing_vars -= vars_defined
-            vars_used = stmt.get('vars_used', [])
-            influencing_vars.update(vars_used)
-            slice_result.append(stmt)
-            control_dependent_events.add(current_id)
-
-        # --- 3. Dynamic Control Dependency Check ---
-        controlling = False
-        dependent_events_to_remove = set()
-
-        for dep_id in control_dependent_events:
-            dep_event = trace_indexed[dep_id]
-            all_ctrl_deps = set(dep_event.get('control_dependencies', [])) | \
-                           set(dep_event.get('inherited_control_dependencies', []))
-
-            if current_id in all_ctrl_deps or -current_id in all_ctrl_deps:
-                controlling = True
-                dependent_events_to_remove.add(dep_id)
-
-        if controlling:
-            control_dependent_events -= dependent_events_to_remove
-            vars_used = stmt.get('vars_used', [])
-            influencing_vars.update(vars_used)
-            slice_result.append(stmt)
-            control_dependent_events.add(current_id)
-
-        current_id -= 1
-
+    # --- Finalize Slice ---
+    # Retrieve the full event dictionaries for the IDs in the slice.
+    # Sort them in reverse chronological order to match the backward traversal.
+    slice_result = [trace_indexed[id] for id in sorted(list(slice_event_ids), reverse=True)]
+    
     return slice_result
+
+
 
 def read_trace_from_jsonl(jsonl_path: str) -> List[Dict]:
     """
