@@ -176,7 +176,7 @@ def infer_slicing_criteria_from_event_type(trace: List[str], target_event_type: 
     return None, None, None, None, None
 
 
-def execute_backward_slice(jsonl_file_path: str, start_event_id: int, target_vars: List[str])->List[str]:
+def execute_backward_slice_for_buggy_code(jsonl_file_path: str, start_event_id: int, target_vars: List[str])->List[str]:
     # --- READ TRACE ---
     trace = read_trace_from_jsonl(jsonl_file_path)
 
