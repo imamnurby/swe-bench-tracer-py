@@ -176,12 +176,12 @@ def infer_slicing_criteria_from_event_type(trace: List[str], target_event_type: 
     return None, None, None, None, None
 
 
-def execute_backward_slice_for_buggy_code(jsonl_file_path: str)->List[str]:
+def execute_backward_slice_for_buggy_code(jsonl_file_path: str, target_event_type: str)->List[str]:
     # --- READ TRACE ---
     trace = read_trace_from_jsonl(jsonl_file_path)
 
     # --- INFER SLICING CRITERIA IF NOT PROVIDED ---
-    start_event_id, target_vars, statement, function_name, filepath = infer_slicing_criteria_from_event_type(trace, start_event_id, target_vars)
+    start_event_id, target_vars, statement, function_name, filepath = infer_slicing_criteria_from_event_type(trace, target_event_type)
 
     if start_event_id is None or target_vars is None:
         print("Could not determine slicing criteria. Exiting.")
