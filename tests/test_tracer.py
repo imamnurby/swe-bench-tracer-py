@@ -107,6 +107,19 @@ def top_level():
         results.append(res)
     return results
 
+class SimpleClass:
+    def classify(self, x):
+        if x > 0:
+            category = "positive"
+        else:
+            category = "non-positive"
+        return category
+
+
+def test_class_method():
+    obj = SimpleClass()
+    return obj.classify(5)
+
 def assert_events_equal(ground_truth_event, actual_event, event_id):
     """
     Assert that two trace events are equal, field by field.
@@ -641,6 +654,24 @@ if __name__ == "__main__":
     tracer.start_tracing()
     try:
         top_level()  # [4, "Handled: ...", 9]
+    finally:
+        tracer.stop_tracing()
+        tracer.save_trace()
+        
+    # Test SimpleClass.classify via test_class_method
+    tracer = ExecutionTracer(output_file="results/trace_class_method_1.jsonl")
+    tracer.start_tracing()
+    try:
+        test_class_method()  # should return "positive"
+    finally:
+        tracer.stop_tracing()
+        tracer.save_trace()
+
+    tracer = ExecutionTracer(output_file="results/trace_class_method_2.jsonl")
+    tracer.start_tracing()
+    try:
+        obj = SimpleClass()
+        obj.classify(-3)  # directly call method → "non-positive"
     finally:
         tracer.stop_tracing()
         tracer.save_trace()
