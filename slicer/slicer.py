@@ -37,7 +37,6 @@ def backward_slice(trace: List[str], start_event_id: int, target_vars: List[str]
             break
 
         # --- 1. Interprocedural Data Dependency Check ---
-        # If this is a Function entry and target var is a parameter with source(s)
         if stmt['event_type'] == 'Function':
             parameters = stmt.get('parameters', {})
             param_sources = stmt.get('parameter_sources', {})
@@ -45,17 +44,15 @@ def backward_slice(trace: List[str], start_event_id: int, target_vars: List[str]
 
             for param in matched_params:
                 sources = param_sources.get(param, [])
-                # Ensure it's treated as a list (even if old format was single dict)
                 if isinstance(sources, dict):
-                    sources = [sources]  # backwards compatibility, if needed
+                    sources = [sources]
                 elif not isinstance(sources, list):
-                    sources = []  # fallback
+                    sources = []
 
                 for source_info in sources:
                     if isinstance(source_info, dict) and 'var' in source_info:
                         source_var = source_info['var']
                         influencing_vars.add(source_var)
-                        # Optional: use source_info['event_id'] for directed jump (not needed in backward walk)
 
                 # Include this Function event in the slice — it’s part of the data flow
                 slice_result.append(stmt)
@@ -109,7 +106,7 @@ def read_trace_from_jsonl(jsonl_path: str) -> List[Dict]:
     with open(jsonl_path, 'r', encoding='utf-8') as f:
         for line in f:
             line = line.strip()
-            if line:  # Skip empty lines
+            if line:
                 event = json.loads(line)
                 trace.append(event)
     return trace
@@ -151,16 +148,12 @@ def infer_slicing_criteria_from_event_type(trace: List[str], target_event_type: 
     start_event_id = anchor_event['event_id']
 
     # Part 2: Find the slicing event and its criteria
-    # Part 2: Find the slicing event and its criteria
     print("Searching backwards from anchor event for the first event with 'vars_used'...")
     
-    # Index trace by event_id for fast lookup
     trace_indexed = {event['event_id']: event for event in trace}
     
-    # Start searching from the anchor_event's id backwards
     for i in range(start_event_id, -1, -1):
         event = trace_indexed.get(i)
-        # Check for a non-empty vars_used list
         if event and event.get('vars_used'):
             final_event_id = event['event_id']
             final_target_vars = event['vars_used']
@@ -171,7 +164,6 @@ def infer_slicing_criteria_from_event_type(trace: List[str], target_event_type: 
             print(f"Found slicing criteria at event {final_event_id}: target_vars = {final_target_vars}")
             return final_event_id, final_target_vars, statement, function_name, filepath
     
-    # If no event with 'vars_used' was found
     print("Could not infer slicing criteria. No event with 'vars_used' found backwards from the anchor.")
     return None, None, None, None, None
 
@@ -227,7 +219,6 @@ def infer_slicing_criteria_from_statement(trace: List[dict], target_filepath: st
     print(f"Searching for statement: '{target_statement.strip()}' in {target_function_name}")
     
     for event in reversed(trace):
-        # Check for all criteria in a single condition
         if (event.get('vars_used') and
             event.get('filepath') == target_filepath and
             event.get('function_name') == target_function_name and
