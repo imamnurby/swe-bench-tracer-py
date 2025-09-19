@@ -7,7 +7,6 @@ if __name__ == "__main__":
     slice_result, starting_statement, starting_function_name, starting_filepath = execute_backward_slice_for_buggy_code(json_filepath, target_event_type="Exception")
 
     for event in slice_result:
-        print(event)
         pp.pprint(event)
         
     pp.pprint(f"Slicing started from the statement: {starting_statement} in function {starting_function_name} located at {starting_filepath}")
