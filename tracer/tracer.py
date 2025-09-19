@@ -8,9 +8,9 @@ from typing import Dict, Any, List, Tuple
 import re
 import copy
 import io, tokenize
-import warnings
-import traceback
+import inspect
 
+from tracer.util import get_func_qualname
 
 class ExecutionTracer:
     def __init__(self, output_file: str = "trace.jsonl"):
@@ -77,15 +77,8 @@ class ExecutionTracer:
     
     def __exit__(self, exc_type, exc_value, tb):
         self.stop_tracing()
-        if exc_type:
-            message = f"Exception caught during tracing: {exc_type.__name__}"
-            if exc_value is not None:
-                message += f" ({exc_value})"
-            warnings.warn(message)
-            if tb is not None:
-                traceback.print_exception(exc_type, exc_value, tb)
+        self.save_trace()
         # suppress exception propagation
-        # the tracer thread should not be interrupted by user code exceptions
         return True
     
     def _get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
@@ -299,30 +292,16 @@ class ExecutionTracer:
     def _get_function_info(self, frame):
         """Extract detailed function information"""
         func_name = frame.f_code.co_name
+        func_qualname = get_func_qualname(frame)
         filename = frame.f_code.co_filename
         line_no = frame.f_lineno
+        mod_name = inspect.getmodule(frame).__name__
         
-        # Get just the filename without full path for cleaner output
-        short_filename = os.path.basename(filename)
-        
-        # Get class name if this is a method
-        class_name = None
-        if 'self' in frame.f_locals:
-            class_name = frame.f_locals['self'].__class__.__name__
-        elif 'cls' in frame.f_locals:
-            class_name = frame.f_locals['cls'].__name__
-            
-        if class_name:
-            qualified_name = f"{short_filename}:{class_name}.{func_name}"
-        else:
-            qualified_name = f"{short_filename}:{func_name}"
-            
         return {
-            'qualified_name': qualified_name,
+            'qualified_name': f'{mod_name}:{func_qualname}',
             'filename': filename,
-            'short_filename': short_filename,
             'func_name': func_name,
-            'class_name': class_name,
+            'mod_name': mod_name,
             'line_no': line_no
         }
     
