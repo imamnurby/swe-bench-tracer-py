@@ -684,15 +684,7 @@ class ExecutionTracer:
             if self.call_stack:
                 exc_type, exc_value, exc_tb = arg
                 source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
-                offending_vars = []
-                try:
-                    words = re.findall(r"[A-Za-z_][A-Za-z_0-9]*", source_line)
-                    for name in words:
-                        if name in str(exc_value):
-                            if f"'{name}'" in str(exc_value):
-                                offending_vars.append(name)
-                except Exception:
-                        pass
+                _, offending_vars = self._get_vars_defined_and_used(source_line)
                     
                 self._add_trace_entry(
                     'Exception',
