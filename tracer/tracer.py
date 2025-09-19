@@ -521,8 +521,8 @@ class ExecutionTracer:
 
             if self.call_stack:
                 self.call_stack.pop()
-                
-                # Finalize any last line still pending for this frame
+                source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
+                _, vars_used = self._get_vars_defined_and_used(source_line)                # Finalize any last line still pending for this frame
                 if frame in self._pending_line_events:
                     prev_event = self._pending_line_events.pop(frame)
                     prev_event['seen_variables'] = self._serialize_value(dict(frame.f_locals))
@@ -535,6 +535,7 @@ class ExecutionTracer:
                     'Return',
                     frame,
                     function_name=returning_func_name,   # ← callee (the one returning)
+                    vars_used=vars_used,
                     caller_name=caller_name_after_return, # ← who we return to
                     return_value=self._serialize_value(arg)
                 )
@@ -698,22 +699,14 @@ class ExecutionTracer:
             if self.call_stack:
                 exc_type, exc_value, exc_tb = arg
                 source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
-                offending_vars = []
-                try:
-                    words = re.findall(r"[A-Za-z_][A-Za-z_0-9]*", source_line)
-                    for name in words:
-                        if name in str(exc_value):
-                            if f"'{name}'" in str(exc_value):
-                                offending_vars.append(name)
-                except Exception:
-                        pass
+                _, vars_used = self._get_vars_defined_and_used(source_line)
                     
                 self._add_trace_entry(
                     'Exception',
                     frame,
                     exception_type=exc_type.__name__,
                     exception_value=str(exc_value),
-                    exception_variables=offending_vars or None
+                    vars_used=vars_used or None
                 )
 
         return self._trace_function
