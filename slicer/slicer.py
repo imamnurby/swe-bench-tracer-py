@@ -63,6 +63,9 @@ def backward_slice(trace: List[Dict], start_event_id: int, target_vars: List[str
     # --- Multi-Pass Slicing Loop ---
     # This loop continues until a full backward pass finds no new influential variables.
     # The main idea is we try to do the backward pass multiple times, each time we record the influencing variables to newly_discovered_vars
+    # We also record cumulative_influencing_vars as the union of all influencing variables found so far
+    # If in a pass, we find no new influencing variables (newly_discovered_vars - cumulative_influencing_vars) is empty --> converge
+    # If converge, then we are done and exit the loop
     while True:
         pass_influencing_vars = cumulative_influencing_vars.copy()
         newly_discovered_vars = set()
