@@ -1,5 +1,5 @@
 import json
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 def backward_slice(trace: List[str], start_event_id: int, target_vars: List[str]) -> List[str]:
     """
@@ -94,7 +94,7 @@ def backward_slice(trace: List[str], start_event_id: int, target_vars: List[str]
 
     return slice_result
 
-def read_trace_from_jsonl(jsonl_path: str) -> list:
+def read_trace_from_jsonl(jsonl_path: str) -> List[Dict]:
     """
     Reads an execution trace from a .jsonl file.
     Each line in the file should be a JSON object representing one event.
@@ -114,7 +114,7 @@ def read_trace_from_jsonl(jsonl_path: str) -> list:
                 trace.append(event)
     return trace
 
-def infer_slicing_criteria_from_event_type(trace: List[str], target_event_type: str):
+def infer_slicing_criteria_from_event_type(trace: List[str], target_event_type: str)->Tuple[int, str, str, str]:
     """
     Infers slicing criteria by finding a relevant event in the trace.
 
@@ -176,7 +176,7 @@ def infer_slicing_criteria_from_event_type(trace: List[str], target_event_type: 
     return None, None, None, None, None
 
 
-def execute_backward_slice_for_buggy_code(jsonl_file_path: str, target_event_type: str)->List[str]:
+def execute_backward_slice_for_buggy_code(jsonl_file_path: str, target_event_type: str)->Tuple[Dict, str, str, str]:
     """
     Executes a backward program slice on a trace from a buggy code execution.
     Args:
