@@ -53,3 +53,14 @@
  'statement': '    obj = SimpleClass()',
  'vars_defined': ['obj'],
  'vars_used': ['SimpleClass']}
+{'control_dependencies': [],
+ 'event_id': 1,
+ 'event_type': 'Line',
+ 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tests/sample_programs/buggy.py',
+ 'function_name': '__main__:run_tests',
+ 'inherited_control_dependencies': [],
+ 'line_number': 19,
+ 'seen_variables': {'processed': 'Category: POSITIVE'},
+ 'statement': '    processed = initialize_and_use_with_input(0)',
+ 'vars_defined': ['processed'],
+ 'vars_used': ['initialize_and_use_with_input']}

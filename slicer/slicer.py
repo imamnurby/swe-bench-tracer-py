@@ -40,6 +40,63 @@ def map_call_sites_to_return_events(trace: List[Dict]) -> Dict[int, Dict]:
 
     return call_site_to_return_map
 
+def build_scope_map(trace: List[Dict]) -> Dict[int, int]:
+    """
+    Builds a map from each event_id to its corresponding function scope_id.
+
+    The scope_id is defined as the event_id of the 'Function' entry event
+    for the function call that the event is a part of. This handles nested
+    calls correctly using a stack.
+
+    Args:
+        trace: The full execution trace.
+
+    Returns:
+        A dictionary mapping event_id -> scope_id.
+    """
+    scope_map = {}
+    scope_stack = []  # Stack of scope_ids (function entry event_ids)
+
+    # We need a way to link Return events back to their Function events
+    # to know when to pop the stack.
+    call_stack = []
+    return_to_func_map = {}
+    for event in trace:
+        if event['event_type'] == 'Function':
+            call_stack.append(event['event_id'])
+        elif event['event_type'] == 'Return':
+            if call_stack:
+                func_event_id = call_stack.pop()
+                return_to_func_map[event['event_id']] = func_event_id
+
+    # Now, build the scope map
+    for event in trace:
+        event_id = event['event_id']
+        
+        if event['event_type'] == 'Return':
+            if scope_stack and event_id in return_to_func_map:
+                # Check if this return corresponds to the current scope
+                if return_to_func_map[event_id] == scope_stack[-1]:
+                    # Assign scope before popping
+                    scope_map[event_id] = scope_stack[-1]
+                    scope_stack.pop()
+                else: # Mismatched return, assign scope from top of stack anyway
+                    if scope_stack:
+                        scope_map[event_id] = scope_stack[-1]
+            elif scope_stack: # Fallback for returns without a matching function
+                 scope_map[event_id] = scope_stack[-1]
+        
+        else: # Not a Return event
+            if scope_stack:
+                scope_map[event_id] = scope_stack[-1]
+
+            if event['event_type'] == 'Function':
+                scope_stack.append(event_id)
+                # A function's entry event is part of its own scope
+                scope_map[event_id] = event_id
+
+    return scope_map
+
 def backward_slice(trace: List[Dict], start_event_id: int, target_vars: List[str]) -> List[Dict]:
     """
     Performs backward dynamic slicing on an execution trace using a multi-pass approach
@@ -57,7 +114,16 @@ def backward_slice(trace: List[Dict], start_event_id: int, target_vars: List[str
     trace_indexed = {event['event_id']: event for event in trace}
     call_site_to_return_map = map_call_sites_to_return_events(trace)
     
-    cumulative_influencing_vars = set(target_vars)
+    scope_map = build_scope_map(trace)
+
+    # The initial variables of interest belong to the scope of the start event.
+    start_scope_id = scope_map.get(start_event_id)
+    if start_scope_id is None:
+        start_scope_id = -1 # Use -1 to denote the global scope
+    
+    # Convert initial target_vars to scoped variables
+    cumulative_influencing_vars = {(var, start_scope_id) for var in target_vars}
+
     slice_event_ids = set()
     
     # --- Multi-Pass Slicing Loop ---
@@ -82,20 +148,30 @@ def backward_slice(trace: List[Dict], start_event_id: int, target_vars: List[str
             is_control_dependent = False
 
             # 1. Dynamic Data Dependency Check
+            current_scope_id = scope_map.get(current_id, -1) # Default to global scope
             vars_defined = set(stmt.get('vars_defined', []))
-            if vars_defined & pass_influencing_vars:
+            
+            # Check if this statement defines any variable we are currently looking for in this specific scope
+            scoped_vars_defined = {(var, current_scope_id) for var in vars_defined}
+            if scoped_vars_defined & pass_influencing_vars:
                 is_data_dependent = True
-                pass_influencing_vars -= vars_defined
+                pass_influencing_vars -= scoped_vars_defined
+                
+                # Add the variables used by this statement (in its scope) as new targets
                 vars_used = stmt.get('vars_used', [])
-                pass_influencing_vars.update(vars_used)
-                newly_discovered_vars.update(vars_used)
+                scoped_vars_used = {(var, current_scope_id) for var in vars_used}
+                pass_influencing_vars.update(scoped_vars_used)
+                newly_discovered_vars.update(scoped_vars_used)
                 
                 # Check for interprocedural data dependency through function returns
                 if current_id in call_site_to_return_map:
                     return_event = call_site_to_return_map[current_id]
+                    return_scope_id = scope_map.get(return_event['event_id'], -1)
                     return_vars_used = return_event.get('vars_used', [])
-                    pass_influencing_vars.update(return_vars_used)
-                    newly_discovered_vars.update(return_vars_used)
+                    
+                    scoped_return_vars = {(var, return_scope_id) for var in return_vars_used}
+                    pass_influencing_vars.update(scoped_return_vars)
+                    newly_discovered_vars.update(scoped_return_vars)
 
             # 2. Dynamic Control Dependency Check
             dependent_events_to_remove = set()
@@ -110,8 +186,10 @@ def backward_slice(trace: List[Dict], start_event_id: int, target_vars: List[str
             if is_control_dependent:
                 control_dependent_events -= dependent_events_to_remove
                 vars_used = stmt.get('vars_used', [])
-                pass_influencing_vars.update(vars_used)
-                newly_discovered_vars.update(vars_used)
+                # Also use the current_scope_id defined in the data dependency check section
+                scoped_vars_used = {(var, current_scope_id) for var in vars_used}
+                pass_influencing_vars.update(scoped_vars_used)
+                newly_discovered_vars.update(scoped_vars_used)
 
             # Add statement to slice if it meets either criterion
             if is_data_dependent or is_control_dependent:
