@@ -2,7 +2,6 @@ import sys
 import os
 import ast
 import json
-import pprint
 from collections import defaultdict
 from typing import Dict, Any, List, Tuple
 import re
@@ -10,6 +9,7 @@ import copy
 import io, tokenize
 import inspect
 
+from pathlib import Path
 from tracer.util import get_func_qualname
 
 class ExecutionTracer:
@@ -128,7 +128,10 @@ class ExecutionTracer:
         """Check if the call is from a standard library module"""
         if not filename:
             return False
-            
+
+        if filename.startswith('<frozen'):
+            return True
+        
         # Normalize the path
         normalized_path = os.path.normpath(filename)
         path_parts = normalized_path.split(os.sep)
@@ -295,7 +298,18 @@ class ExecutionTracer:
         func_qualname = get_func_qualname(frame)
         filename = frame.f_code.co_filename
         line_no = frame.f_lineno
-        mod_name = inspect.getmodule(frame).__name__
+        module = inspect.getmodule(frame)        
+
+        if module is None:
+            mod_name = Path(filename).stem
+        else:
+            mod_name = module.__name__
+            if mod_name == "__main__":
+                module_file = getattr(module, "__file__", None)
+                if module_file:
+                    mod_name = Path(module_file).stem
+                else:
+                    mod_name = Path(filename).stem
         
         return {
             'qualified_name': f'{mod_name}:{func_qualname}',
