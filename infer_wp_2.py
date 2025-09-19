@@ -30,7 +30,18 @@ def compute_weakest_precondition(
     # Build event_id -> event map
     event_map = {event['event_id']: event for event in trace_events}
 
+    negated_branches = set()
+    if target_event_id in event_map:
+        target_event = event_map[target_event_id]
+        negated_branches = {
+            abs(dep) 
+            for dep in target_event.get('inherited_control_dependencies', []) 
+            if dep < 0
+        }
+
     current_id = target_event_id
+
+    
 
     while current_id >= 0:
         if current_id not in event_map:
@@ -72,11 +83,17 @@ def compute_weakest_precondition(
                 # Remove inline comments
                 condition = re.split(r'\s*#', condition)[0].strip()
 
+                # ✅ If this branch was NOT taken (negated dependency), negate the condition
+                if event['event_id'] in negated_branches:
+                    condition = f"not ({condition})"
+
                 if Q == "true":
                     Q = condition
                 else:
                     Q = f"({condition}) ∧ ({Q})"
-                contribution_map.append((line_num, stmt))
+                    
+                display_stmt = f"not {stmt}" if event['event_id'] in negated_branches else stmt
+                contribution_map.append((line_num, display_stmt))
 
         # --- Handle "Function" events ---
         elif event_type == "Function":
@@ -100,11 +117,19 @@ def compute_weakest_precondition(
 if __name__ == "__main__":
     # Buggy trace: x = 50 → y = 150 expected at D(y)
     trace_buggy = [
-        {'event_id': 10, 'event_type': 'Function', 'line_number': 769, 'statement': 'def D(y):', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:D', 'caller_name': 'tracer.py:C', 'parameters': {'y': 150}, 'parameter_sources': {'y': [{'var': 'z', 'event_id': 4}]}, 'inherited_control_dependencies': [-8]},
-        {'event_id': 8, 'event_type': 'Line', 'line_number': 764, 'statement': '    if B == 150:', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'vars_defined': [], 'vars_used': ['B'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 150}},
-        {'event_id': 4, 'event_type': 'Line', 'line_number': 763, 'statement': '    z = B(z)', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'vars_defined': ['z'], 'vars_used': ['B', 'z'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 50}},
-        {'event_id': 3, 'event_type': 'Function', 'line_number': 762, 'statement': 'def C(z):', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'caller_name': 'tracer.py:A', 'parameters': {'z': 50}, 'parameter_sources': {'z': [{'var': 'x', 'event_id': 1}]}, 'inherited_control_dependencies': []},
-        {'event_id': 1, 'event_type': 'Line', 'line_number': 756, 'statement': '    x = 50', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:A', 'vars_defined': ['x'], 'vars_used': [], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {}}
+        {'event_id': 8, 'event_type': 'Line', 'line_number': 764, 'statement': '    if z == 150:', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:C', 'vars_defined': [], 'vars_used': ['z'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 150}},
+{'event_id': 4, 'event_type': 'Line', 'line_number': 763, 'statement': '    z = B(z)', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:C', 'vars_defined': ['z'], 'vars_used': ['B', 'z'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 50}},
+{'event_id': 3, 'event_type': 'Function', 'line_number': 762, 'statement': 'def C(z):', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:C', 'caller_name': 'tracer.py:A', 'parameters': {'z': 50}, 'parameter_sources': {'z': [{'var': 'x', 'event_id': 1}]}, 'inherited_control_dependencies': []},
+{'event_id': 1, 'event_type': 'Line', 'line_number': 756, 'statement': '    x = 50', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:A', 'vars_defined': ['x'], 'vars_used': [], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {}},
+
+
+
+
+        # {'event_id': 10, 'event_type': 'Function', 'line_number': 769, 'statement': 'def D(y):', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:D', 'caller_name': 'tracer.py:C', 'parameters': {'y': 150}, 'parameter_sources': {'y': [{'var': 'z', 'event_id': 4}]}, 'inherited_control_dependencies': [-8]},
+        # {'event_id': 8, 'event_type': 'Line', 'line_number': 764, 'statement': '    if B == 150:', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'vars_defined': [], 'vars_used': ['B'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 150}},
+        # {'event_id': 4, 'event_type': 'Line', 'line_number': 763, 'statement': '    z = B(z)', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'vars_defined': ['z'], 'vars_used': ['B', 'z'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 50}},
+        # {'event_id': 3, 'event_type': 'Function', 'line_number': 762, 'statement': 'def C(z):', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'caller_name': 'tracer.py:A', 'parameters': {'z': 50}, 'parameter_sources': {'z': [{'var': 'x', 'event_id': 1}]}, 'inherited_control_dependencies': []},
+        # {'event_id': 1, 'event_type': 'Line', 'line_number': 756, 'statement': '    x = 50', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:A', 'vars_defined': ['x'], 'vars_used': [], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {}}
 # {'event_id': 24, 'event_type': 'Line', 'line_number': 811, 'statement': '                total += transform_even(val)', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:process_list', 'vars_defined': ['total'], 'vars_used': ['transform_even', 'val'], 'control_dependencies': [20, 22, 23], 'inherited_control_dependencies': [], 'seen_variables': {'n': 10, 'total': 105, 'items': [10, 11, 12], 'i': 2, 'val': 12}},
 # {'event_id': 23, 'event_type': 'Line', 'line_number': 810, 'statement': '            if val % 2 == 0:', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:process_list', 'vars_defined': [], 'vars_used': ['val'], 'control_dependencies': [20, 22], 'inherited_control_dependencies': [], 'seen_variables': {'n': 10, 'total': 105, 'items': [10, 11, 12], 'i': 2, 'val': 12}},
 # {'event_id': 22, 'event_type': 'Line', 'line_number': 809, 'statement': '        if i > 0:            # 🐞 BUG: should be `if val > 0`', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:process_list', 'vars_defined': [], 'vars_used': ['i'], 'control_dependencies': [20], 'inherited_control_dependencies': [], 'seen_variables': {'n': 10, 'total': 105, 'items': [10, 11, 12], 'i': 2, 'val': 12}},
@@ -118,11 +143,18 @@ if __name__ == "__main__":
 
     # Golden trace: x = 0 → y = 100 expected at D(y)
     trace_golden = [
-        {'event_id': 10, 'event_type': 'Function', 'line_number': 769, 'statement': 'def D(y):', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:D', 'caller_name': 'tracer.py:C', 'parameters': {'y': 100}, 'parameter_sources': {'y': [{'var': 'z', 'event_id': 4}]}, 'inherited_control_dependencies': [-8]},
-        {'event_id': 8, 'event_type': 'Line', 'line_number': 764, 'statement': '    if B == 150:', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'vars_defined': [], 'vars_used': ['B'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 100}},
-        {'event_id': 4, 'event_type': 'Line', 'line_number': 763, 'statement': '    z = B(z)', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'vars_defined': ['z'], 'vars_used': ['B', 'z'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 0}},
-        {'event_id': 3, 'event_type': 'Function', 'line_number': 762, 'statement': 'def C(z):', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'caller_name': 'tracer.py:A', 'parameters': {'z': 0}, 'parameter_sources': {'z': [{'var': 'x', 'event_id': 1}]}, 'inherited_control_dependencies': []},
-        {'event_id': 1, 'event_type': 'Line', 'line_number': 756, 'statement': '    x = 0', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:A', 'vars_defined': ['x'], 'vars_used': [], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {}},
+
+        {'event_id': 10, 'event_type': 'Function', 'line_number': 769, 'statement': 'def D(y):', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:D', 'caller_name': 'tracer.py:C', 'parameters': {'y': 100}, 'parameter_sources': {'y': [{'var': 'z', 'event_id': 4}]}, 'inherited_control_dependencies': [-8]},
+{'event_id': 8, 'event_type': 'Line', 'line_number': 764, 'statement': '    if z == 150:', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:C', 'vars_defined': [], 'vars_used': ['z'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 100}},
+{'event_id': 4, 'event_type': 'Line', 'line_number': 763, 'statement': '    z = B(z)', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:C', 'vars_defined': ['z'], 'vars_used': ['z', 'B'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 0}},
+{'event_id': 3, 'event_type': 'Function', 'line_number': 762, 'statement': 'def C(z):', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:C', 'caller_name': 'tracer.py:A', 'parameters': {'z': 0}, 'parameter_sources': {'z': [{'var': 'x', 'event_id': 1}]}, 'inherited_control_dependencies': []},
+{'event_id': 1, 'event_type': 'Line', 'line_number': 756, 'statement': '    x = 0', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:A', 'vars_defined': ['x'], 'vars_used': [], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {}},
+
+        # {'event_id': 10, 'event_type': 'Function', 'line_number': 769, 'statement': 'def D(y):', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:D', 'caller_name': 'tracer.py:C', 'parameters': {'y': 100}, 'parameter_sources': {'y': [{'var': 'z', 'event_id': 4}]}, 'inherited_control_dependencies': [-8]},
+        # {'event_id': 8, 'event_type': 'Line', 'line_number': 764, 'statement': '    if B == 150:', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'vars_defined': [], 'vars_used': ['B'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 100}},
+        # {'event_id': 4, 'event_type': 'Line', 'line_number': 763, 'statement': '    z = B(z)', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'vars_defined': ['z'], 'vars_used': ['B', 'z'], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {'z': 0}},
+        # {'event_id': 3, 'event_type': 'Function', 'line_number': 762, 'statement': 'def C(z):', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:C', 'caller_name': 'tracer.py:A', 'parameters': {'z': 0}, 'parameter_sources': {'z': [{'var': 'x', 'event_id': 1}]}, 'inherited_control_dependencies': []},
+        # {'event_id': 1, 'event_type': 'Line', 'line_number': 756, 'statement': '    x = 0', 'filepath': '/home/yusuf/...', 'function_name': 'tracer.py:A', 'vars_defined': ['x'], 'vars_used': [], 'control_dependencies': [], 'inherited_control_dependencies': [], 'seen_variables': {}},
 #     {'event_id': 29, 'event_type': 'Line', 'line_number': 785, 'statement': '                total += transform_even(val)', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:process_list', 'vars_defined': ['total'], 'vars_used': ['val', 'transform_even'], 'control_dependencies': [25, 27, 28], 'inherited_control_dependencies': [], 'seen_variables': {'n': 10, 'total': 205, 'items': [10, 11, 12], 'i': 2, 'val': 12}},
 # {'event_id': 28, 'event_type': 'Line', 'line_number': 784, 'statement': '            if val % 2 == 0:', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:process_list', 'vars_defined': [], 'vars_used': ['val'], 'control_dependencies': [25, 27], 'inherited_control_dependencies': [], 'seen_variables': {'n': 10, 'total': 205, 'items': [10, 11, 12], 'i': 2, 'val': 12}},
 # {'event_id': 27, 'event_type': 'Line', 'line_number': 783, 'statement': '        if val > 0:', 'filepath': '/home/yusuf/ds-symbolic-explanation/swe-bench-tracer-py/tracer.py', 'function_name': 'tracer.py:process_list', 'vars_defined': [], 'vars_used': ['val'], 'control_dependencies': [25], 'inherited_control_dependencies': [], 'seen_variables': {'n': 10, 'total': 205, 'items': [10, 11, 12], 'i': 2, 'val': 12}},
@@ -136,7 +168,7 @@ if __name__ == "__main__":
 
     print("=== BUGGY TRACE ===")
     # wp_buggy, contribs_buggy = compute_weakest_precondition(trace_buggy, 24, {'total': 105})
-    wp_buggy, contribs_buggy = compute_weakest_precondition(trace_buggy, 10, {'y': 150})
+    wp_buggy, contribs_buggy = compute_weakest_precondition(trace_buggy, 8, {'z': 150})
 
     print("Weakest Precondition:", wp_buggy)
     print("Contributions:")
