@@ -1,3 +1,4 @@
+import re
 import sys
 import inspect
 import warnings
@@ -25,3 +26,32 @@ def get_func_qualname(frame: FrameType) -> str:
                     return f"{val.__qualname__}.<locals>.{frame.f_code.co_name}"
     warnings.warn(f"Cannot determine qualname, fallback to co_name: {frame.f_code.co_name}")
     return frame.f_code.co_name
+
+def short_repr(obj):
+    if obj is None:
+        return "None"
+    if isinstance(obj, (int, float, bool)):
+        return str(obj)
+    if isinstance(obj, (str, bytes)):
+        s = str(obj)
+        if len(s) > 10:
+            return s[:7] + "..."
+        return re.sub(r'\s+', '_', s)
+    if isinstance(obj, (list, tuple, set, frozenset)):
+        items = [short_repr(item) for item in list(obj)[:3]]
+        return f"{type(obj).__name__}({','.join(items)}{'...' if len(obj) > 3 else ''})"
+    return type(obj).__name__
+
+def call_signature(func, *args, **kwargs):
+    sig = inspect.signature(func)
+    bound = sig.bind_partial(*args, **kwargs)
+    bound.apply_defaults()
+    parts = []
+    for name, value in bound.arguments.items():
+        parts.append(f"{name}={short_repr(value)}")
+    if len(parts) == 0:
+        base = f"{func.__module__}.{func.__qualname__}"
+    else:
+        base = f"{func.__module__}.{func.__qualname__}__" + "__".join(parts)
+    sanitized = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', base)
+    return sanitized[:120]

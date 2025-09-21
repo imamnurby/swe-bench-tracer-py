@@ -2,15 +2,38 @@ import sys
 import os
 import ast
 import json
-from collections import defaultdict
-from typing import Dict, Any, List, Tuple
 import re
 import copy
 import io, tokenize
 import inspect
 
+from collections import defaultdict
+from typing import Dict, Any, List, Tuple
+from functools import wraps
 from pathlib import Path
-from tracer.util import get_func_qualname
+from tracer.util import get_func_qualname, call_signature
+
+def trace(prefix: str = ""):
+    '''
+    Decorator to trace a function's execution and save to a JSONL file.
+    File name is derived from function signature and actual arguments.
+    Only put on top of the entry function to be traced.
+    '''
+    def decorator(func):
+        if inspect.iscoroutinefunction(func):
+            @wraps(func)
+            async def wrapper(*args, **kwargs):
+                sig = call_signature(func, *args, **kwargs)
+                with ExecutionTracer(os.path.join(prefix, sig + ".jsonl")):
+                    return await func(*args, **kwargs)
+        else:
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                sig = call_signature(func, *args, **kwargs)
+                with ExecutionTracer(os.path.join(prefix, sig + ".jsonl")):
+                    return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 class ExecutionTracer:
     def __init__(self, output_file: str = "trace.jsonl"):
@@ -78,7 +101,9 @@ class ExecutionTracer:
     def __exit__(self, exc_type, exc_value, tb):
         self.stop_tracing()
         self.save_trace()
-        # suppress exception propagation
+        # Exceptions should be propagated to test framework
+        if exc_type is not None:
+            return False
         return True
     
     def _get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
@@ -124,11 +149,12 @@ class ExecutionTracer:
         )
         return line.strip().startswith(keywords)
     
-    def _is_stdlib_call(self, filename):
-        """Check if the call is from a standard library module"""
+    def _should_ignore(self, filename):
+        """Check if the call is from a standard library or test framework"""
         if not filename:
             return False
 
+        # Check for built-in modules
         if filename.startswith('<frozen'):
             return True
         
@@ -140,6 +166,15 @@ class ExecutionTracer:
         for part in path_parts:
             if part in self.stdlib_modules:
                 return True
+
+        # Check for test-related paths
+        # TODO: Check if the heuristics in the function are sufficient for SWE-Bench
+        test_ignores = [
+            os.path.join('site-packages', '_pytest'),
+            os.path.join('site-packages', 'pluggy'),
+        ]
+        if any(ignored in normalized_path for ignored in test_ignores):
+            return True
                 
         # Also check for common stdlib patterns
         if 'site-packages' in normalized_path:
@@ -367,7 +402,7 @@ class ExecutionTracer:
         
         func_info = self._get_function_info(frame)
 
-        if self._is_stdlib_call(func_info['filename']):
+        if self._should_ignore(func_info['filename']):
             return self._trace_function
 
         if event == 'call':
@@ -721,11 +756,15 @@ class ExecutionTracer:
         
     def save_trace(self):
         """Save the collected trace data to JSONL file"""
+        # Ensure output directory exists
+        base_dir = os.path.dirname(self.output_file)
+        if base_dir:
+            os.makedirs(base_dir, exist_ok=True)
         with open(self.output_file, 'w', encoding='utf-8') as f:
             for entry in self.trace_data:
                 json.dump(entry, f, ensure_ascii=False)
                 f.write('\n')
-        print(f"Trace saved to {self.output_file}")
+        print(f"Trace saved to {self.output_file}", file=sys.stderr, flush=True)
         
     def get_trace_summary(self):
         """Get a summary of the collected trace"""
