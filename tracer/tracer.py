@@ -294,6 +294,10 @@ class ExecutionTracer:
         except (TypeError, ValueError):
             # Fall back to string representation
             return f"<non-serializable: {type(value).__name__}>"
+
+    def _serialize_dict_values(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Serialize each value in a dictionary."""
+        return {key: self._serialize_value(value) for key, value in data.items()}
     
     def _get_function_parameters(self, frame) -> Dict[str, Any]:
         """Extract function parameters and their values"""
@@ -560,7 +564,7 @@ class ExecutionTracer:
                 _, vars_used = self._get_vars_defined_and_used(source_line)                # Finalize any last line still pending for this frame
                 if frame in self._pending_line_events:
                     prev_event = self._pending_line_events.pop(frame)
-                    prev_event['seen_variables'] = self._serialize_value(dict(frame.f_locals))
+                    prev_event['seen_variables'] = self._serialize_dict_values(dict(frame.f_locals))
                 
                 if self.function_variables_stack:
                     self.function_variables_stack.pop()
@@ -579,7 +583,7 @@ class ExecutionTracer:
             if frame in self._pending_line_events:
                 prev_event = self._pending_line_events.pop(frame)
                 # capture the now-up-to-date locals
-                prev_event['seen_variables'] = self._serialize_value(dict(frame.f_locals))
+                prev_event['seen_variables'] = self._serialize_dict_values(dict(frame.f_locals))
                 
             # Update local variables first (as before)
             self._update_function_variables(frame)
