@@ -3,7 +3,7 @@ import sys
 import inspect
 import warnings
 
-from types import CodeType, FrameType
+from types import CodeType, FrameType, GenericAlias
 
 def get_func_qualname(frame: FrameType) -> str:
     if sys.version_info >= (3, 11):
@@ -15,8 +15,10 @@ def get_func_qualname(frame: FrameType) -> str:
         # function is a method in a class in the module
         if inspect.isclass(val):
             # check all methods of the class
+            if isinstance(val, GenericAlias):
+                val = val.__origin__
             for _, method in inspect.getmembers(val, predicate=lambda x: inspect.isfunction(x) or inspect.ismethod(x)):
-                if method.__code__ is frame.f_code:
+                if hasattr(method, '__code__') and method.__code__ is frame.f_code:
                     return method.__qualname__
     # function is a nested function; we only support one level of nesting for now
     for val in frame.f_globals.values():
