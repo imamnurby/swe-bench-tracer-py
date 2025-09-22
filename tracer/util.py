@@ -43,8 +43,8 @@ def short_repr(obj):
         return re.sub(r'\s+', '_', s)
     if isinstance(obj, (list, tuple, set, frozenset)):
         items = [short_repr(item) for item in list(obj)[:3]]
-        return f"{type(obj).__name__}({','.join(items)}{'...' if len(obj) > 3 else ''})"
-    return type(obj).__name__
+        return f"{type(obj).__name__}({','.join(items)}{'...' if len(obj) > 5 else ''})"
+    return f"{type(obj).__name__}{hex(id(obj))}"
 
 def call_signature(func, *args, **kwargs):
     sig = inspect.signature(func)
