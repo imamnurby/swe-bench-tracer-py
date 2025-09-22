@@ -534,8 +534,8 @@ class ExecutionTracer:
                 frame,
                 function_name=func_info['qualified_name'],  # ← callee (correct scope)
                 caller_name=self.call_stack[-2]['qualified_name'] if len(self.call_stack) > 1 else "<module>",  # ← new field
-                parameters=parameters,
-                parameter_sources=parameter_sources,
+                # parameters=parameters,
+                # parameter_sources=parameter_sources,
                 inherited_control_dependencies=[
                     e['id'] if e.get('truth') is not False else -e['id']
                     for e in caller_snapshot
@@ -695,7 +695,7 @@ class ExecutionTracer:
                     vars_used=vars_used,
                     control_dependencies=control_deps,
                     inherited_control_dependencies=inherited_ids,
-                    seen_variables=seen_variables
+                    # seen_variables=seen_variables
                 )
                 
                 self._pending_line_events[frame] = self.trace_data[-1]
@@ -723,7 +723,7 @@ class ExecutionTracer:
                     vars_used=vars_used,
                     control_dependencies=control_deps,
                     inherited_control_dependencies=inherited_ids,
-                    seen_variables=seen_variables
+                    # seen_variables=seen_variables
                 )
                 
                 self._pending_line_events[frame] = self.trace_data[-1]
