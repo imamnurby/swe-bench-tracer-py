@@ -12,7 +12,7 @@ from collections import defaultdict
 from typing import Dict, Any, List, Tuple
 from functools import wraps
 from pathlib import Path
-from tracer.util import get_func_qualname, call_signature
+from tracer.util import get_func_qualname, call_signature, safe_pickle
 
 def trace(prefix: str = ""):
     '''
@@ -766,7 +766,7 @@ class ExecutionTracer:
         if base_dir:
             os.makedirs(base_dir, exist_ok=True)
         with open(self.output_file, 'wb') as f:
-            pickle.dump(self.trace_data, f)
+            pickle.dump(safe_pickle(self.trace_data), f)
         print(f"Pickled traces saved to {self.output_file}", file=sys.stderr, flush=True)
         
     def get_trace_summary(self):
