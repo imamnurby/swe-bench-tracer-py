@@ -6,6 +6,7 @@ import re
 import copy
 import io, tokenize
 import inspect
+import pickle
 
 from collections import defaultdict
 from typing import Dict, Any, List, Tuple
@@ -24,13 +25,13 @@ def trace(prefix: str = ""):
             @wraps(func)
             async def wrapper(*args, **kwargs):
                 sig = call_signature(func, *args, **kwargs)
-                with ExecutionTracer(os.path.join(prefix, sig + ".jsonl")):
+                with ExecutionTracer(os.path.join(prefix, sig + ".pkl")):
                     return await func(*args, **kwargs)
         else:
             @wraps(func)
             def wrapper(*args, **kwargs):
                 sig = call_signature(func, *args, **kwargs)
-                with ExecutionTracer(os.path.join(prefix, sig + ".jsonl")):
+                with ExecutionTracer(os.path.join(prefix, sig + ".pkl")):
                     return func(*args, **kwargs)
         return wrapper
     return decorator
@@ -759,16 +760,14 @@ class ExecutionTracer:
         sys.settrace(None)
         
     def save_trace(self):
-        """Save the collected trace data to JSONL file"""
+        """Save the collected trace data to pickle file"""
         # Ensure output directory exists
         base_dir = os.path.dirname(self.output_file)
         if base_dir:
             os.makedirs(base_dir, exist_ok=True)
-        with open(self.output_file, 'w', encoding='utf-8') as f:
-            for entry in self.trace_data:
-                json.dump(entry, f, ensure_ascii=False)
-                f.write('\n')
-        print(f"Trace saved to {self.output_file}", file=sys.stderr, flush=True)
+        with open(self.output_file, 'wb') as f:
+            pickle.dump(self.trace_data, f)
+        print(f"Pickled traces saved to {self.output_file}", file=sys.stderr, flush=True)
         
     def get_trace_summary(self):
         """Get a summary of the collected trace"""
