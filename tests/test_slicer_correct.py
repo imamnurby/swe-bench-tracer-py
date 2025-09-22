@@ -1,5 +1,5 @@
 from slicer import execute_backward_slice_for_correct_code
-import pprint as pp
+import json
 
 
 if __name__ == "__main__":
@@ -9,5 +9,7 @@ if __name__ == "__main__":
     target_function_name = "__main__:run_tests"
     slice_result = execute_backward_slice_for_correct_code(json_filepath, target_filepath, target_function_name, target_statement)
 
-    for event in slice_result:
-        pp.pprint(event)   
+    with open("sample_programs/correct_slice.result", 'w', encoding='utf-8') as f:
+        for event in slice_result:
+            json.dump(event, f, ensure_ascii=False)
+            f.write('\n')
