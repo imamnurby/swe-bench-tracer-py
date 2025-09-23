@@ -12,7 +12,7 @@ from collections import defaultdict
 from typing import Dict, Any, List, Tuple
 from functools import wraps
 from pathlib import Path
-from tracer.util import get_func_qualname, call_signature, safe_pickle
+from tracer.util import get_func_qualname, call_signature, sanitize_for_json
 
 def trace(prefix: str = ""):
     '''
@@ -25,13 +25,13 @@ def trace(prefix: str = ""):
             @wraps(func)
             async def wrapper(*args, **kwargs):
                 sig = call_signature(func, *args, **kwargs)
-                with ExecutionTracer(os.path.join(prefix, sig + ".pkl")):
+                with ExecutionTracer(os.path.join(prefix, sig + ".jsonl")):
                     return await func(*args, **kwargs)
         else:
             @wraps(func)
             def wrapper(*args, **kwargs):
                 sig = call_signature(func, *args, **kwargs)
-                with ExecutionTracer(os.path.join(prefix, sig + ".pkl")):
+                with ExecutionTracer(os.path.join(prefix, sig + ".jsonl")):
                     return func(*args, **kwargs)
         return wrapper
     return decorator
@@ -101,11 +101,11 @@ class ExecutionTracer:
     
     def __exit__(self, exc_type, exc_value, tb):
         self.stop_tracing()
-        self.save_trace()
-        # Exceptions should be propagated to test framework
-        if exc_type is not None:
-            return False
-        return True
+        try:
+            self.save_trace()
+        except Exception as e:
+            print(f"Failed to save trace to {self.output_file}: {e}", file=sys.stderr, flush=True)
+        return False
     
     def _get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
         """Return separate lists of variables defined and used in the statement."""
@@ -535,8 +535,8 @@ class ExecutionTracer:
                 frame,
                 function_name=func_info['qualified_name'],  # ← callee (correct scope)
                 caller_name=self.call_stack[-2]['qualified_name'] if len(self.call_stack) > 1 else "<module>",  # ← new field
-                # parameters=parameters,
-                # parameter_sources=parameter_sources,
+                parameters=parameters,
+                parameter_sources=parameter_sources,
                 inherited_control_dependencies=[
                     e['id'] if e.get('truth') is not False else -e['id']
                     for e in caller_snapshot
@@ -696,7 +696,7 @@ class ExecutionTracer:
                     vars_used=vars_used,
                     control_dependencies=control_deps,
                     inherited_control_dependencies=inherited_ids,
-                    # seen_variables=seen_variables
+                    seen_variables=seen_variables
                 )
                 
                 self._pending_line_events[frame] = self.trace_data[-1]
@@ -724,7 +724,7 @@ class ExecutionTracer:
                     vars_used=vars_used,
                     control_dependencies=control_deps,
                     inherited_control_dependencies=inherited_ids,
-                    # seen_variables=seen_variables
+                    seen_variables=seen_variables
                 )
                 
                 self._pending_line_events[frame] = self.trace_data[-1]
@@ -760,14 +760,21 @@ class ExecutionTracer:
         sys.settrace(None)
         
     def save_trace(self):
-        """Save the collected trace data to pickle file"""
+        """Save the collected trace data to JSONL file"""
         # Ensure output directory exists
         base_dir = os.path.dirname(self.output_file)
         if base_dir:
             os.makedirs(base_dir, exist_ok=True)
-        with open(self.output_file, 'wb') as f:
-            pickle.dump(safe_pickle(self.trace_data), f)
-        print(f"Pickled traces saved to {self.output_file}", file=sys.stderr, flush=True)
+        with open(self.output_file, 'w') as f:
+            for entry in self.trace_data:
+                try:
+                    json_line = json.dumps(entry, ensure_ascii=False)
+                    f.write(json_line + '\n')
+                except TypeError:
+                    sanitized_entry = sanitize_for_json(entry)
+                    json_line = json.dumps(sanitized_entry, ensure_ascii=False)
+                    f.write(json_line + '\n')
+        print(f"Trace saved to {self.output_file}", file=sys.stderr, flush=True)
         
     def get_trace_summary(self):
         """Get a summary of the collected trace"""

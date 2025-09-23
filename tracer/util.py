@@ -1,11 +1,10 @@
 import re
 import sys
-import pickle
+import json
 import inspect
 import warnings
 
 from types import CodeType, FrameType, GenericAlias
-from collections.abc import Mapping
 
 def get_func_qualname(frame: FrameType) -> str:
     if sys.version_info >= (3, 11):
@@ -60,33 +59,15 @@ def call_signature(func, *args, **kwargs):
     sanitized = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', base)
     return sanitized[:120]
 
-def safe_pickle(obj):
-    basic = (int, float, bool, str, bytes, type(None))
-    if isinstance(obj, basic):
-        return obj
-    if isinstance(obj, Mapping):
-        out = {}
-        for k, v in obj.items():
-            try:
-                pickle.dumps(k)
-                new_k = k
-            except Exception:
-                new_k = f'<non-picklable: {type(k).__name__}>'
-            try:
-                pickle.dumps(v)
-                new_v = v
-            except Exception:
-                new_v = safe_pickle(v)
-            out[new_k] = new_v
-        return out
-    if isinstance(obj, (list, tuple, set, frozenset)):
-        seq_type = type(obj)
-        new_seq = []
-        for item in obj:
-            try:
-                pickle.dumps(item)
-                new_seq.append(item)
-            except Exception:
-                new_seq.append(safe_pickle(item))
-        return seq_type(new_seq)
-    return f'<non-picklable: {type(obj).__name__}>'
+def sanitize_for_json(data):
+    if isinstance(data, (int, float, str, bool, type(None))):
+        return data
+    if isinstance(data, dict):
+        return {key: sanitize_for_json(value) for key, value in data.items()}
+    if isinstance(data, (list, tuple, set)):
+        return [sanitize_for_json(item) for item in data]
+    try:
+        json.dumps(data)
+        return data
+    except TypeError:
+        return f"<non-serializable: {type(data).__name__}>"
