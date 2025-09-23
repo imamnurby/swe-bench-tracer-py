@@ -6,7 +6,6 @@ import re
 import copy
 import io, tokenize
 import inspect
-import pickle
 
 from collections import defaultdict
 from typing import Dict, Any, List, Tuple
@@ -168,18 +167,9 @@ class ExecutionTracer:
             if part in self.stdlib_modules:
                 return True
 
-        # Check for test-related paths
-        # TODO: Check if the heuristics in the function are sufficient for SWE-Bench
-        test_ignores = [
-            os.path.join('site-packages', '_pytest'),
-            os.path.join('site-packages', 'pluggy'),
-        ]
-        if any(ignored in normalized_path for ignored in test_ignores):
-            return True
-                
-        # Also check for common stdlib patterns
+        # Exclude calls to third-party libraries
         if 'site-packages' in normalized_path:
-            return False  # Third-party packages
+            return True
             
         # Check if it's in the standard Python installation
         python_paths = [
