@@ -157,15 +157,18 @@ class ExecutionTracer:
         # Check for built-in modules
         if filename.startswith('<frozen'):
             return True
+    
+        # Exclude tracer's pytest plugin module
+        if 'tracer_pytest' in filename:
+            return True
         
         # Normalize the path
         normalized_path = os.path.normpath(filename)
         path_parts = normalized_path.split(os.sep)
         
         # Check if any part of the path matches stdlib modules
-        for part in path_parts:
-            if part in self.stdlib_modules:
-                return True
+        if any(part in self.stdlib_modules for part in path_parts):
+            return True
 
         # Exclude calls to third-party libraries
         if 'site-packages' in normalized_path:
@@ -179,9 +182,8 @@ class ExecutionTracer:
             '/usr/local/lib/python'
         ]
         
-        for py_path in python_paths:
-            if py_path in normalized_path:
-                return True
+        if any(py_path in normalized_path for py_path in python_paths):
+            return True
                 
         return False
         
