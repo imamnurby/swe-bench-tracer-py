@@ -1,0 +1,16 @@
+[project]
+name = "py-tracer"
+version = "0.1.0"
+dependencies = [
+    "pytest",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["tracer", "tracer_pytest"]
+
+[project.entry-points.pytest11]
+tracer_pytest = "tracer_pytest"
