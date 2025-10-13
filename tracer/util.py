@@ -27,7 +27,6 @@ def get_func_qualname(frame: FrameType) -> str:
             for const in val.__code__.co_consts:
                 if isinstance(const, CodeType) and const is frame.f_code:
                     return f"{val.__qualname__}.<locals>.{frame.f_code.co_name}"
-    warnings.warn(f"Cannot determine qualname, fallback to co_name: {frame.f_code.co_name}")
     return frame.f_code.co_name
 
 def short_repr(obj):
