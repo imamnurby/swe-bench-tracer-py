@@ -1,4 +1,7 @@
+import os
 import pytest
+
+from tracer import ExecutionTracer
 
 def pytest_addoption(parser):
     group = parser.getgroup("tracer")
@@ -15,11 +18,10 @@ def pytest_unconfigure(config):
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):
-    '''
-    Wraps the test call to trace its execution. Setup and teardown are not traced.
-    '''
     cfg = item.config
+    test_name = item.nodeid
     output_dir = getattr(cfg, '_tracer_output_dir', None)
     assert output_dir is not None, "Tracer output directory not set"
-    
-    
+    output_file = os.path.join(output_dir, f"{test_name}.jsonl")
+    with ExecutionTracer(output_file):
+        yield    
