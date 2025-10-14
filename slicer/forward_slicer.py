@@ -200,47 +200,58 @@ def forward_slice(trace: List[Dict], start_event_id: int, target_vars: List[str]
                 is_control_dependent = False
                 current_scope_id = scope_map.get(current_id, -1)
 
-                # 1. Dynamic Data Dependency Check
-                vars_used = set(stmt.get('vars_used', []))
-                scoped_vars_used = {(var, current_scope_id) for var in vars_used}
-                if scoped_vars_used & pass_affected_vars:
-                    is_data_dependent = True
+                # 1. Dynamic Data Dependency Check for Line/Return events
+                if stmt['event_type'] in ['Line', 'Return']:
+                    vars_used = set(stmt.get('vars_used', []))
+                    scoped_vars_used = {(var, current_scope_id) for var in vars_used}
+                    if scoped_vars_used & pass_affected_vars:
+                        is_data_dependent = True
+                
+                # 2. Dynamic Data Dependency Check for Function entry events (parameters)
+                elif stmt['event_type'] == 'Function':
+                    param_sources = stmt.get('parameter_sources', {})
+                    for param, sources in param_sources.items():
+                        if not sources: continue
+                        for source in sources:
+                            source_var, source_event_id = source.get('var'), source.get('event_id')
+                            if not source_var: continue
+                            
+                            source_scope_id = scope_map.get(source_event_id, -1)
+                            if (source_var, source_scope_id) in pass_affected_vars:
+                                is_data_dependent = True
+                                # The parameter itself now becomes an affected variable
+                                scoped_param = (param, current_id) # Scope of a function is its own event_id
+                                if scoped_param not in pass_affected_vars:
+                                     pass_affected_vars.add(scoped_param)
+                                     newly_affected_vars.add(scoped_param)
+                        if is_data_dependent:
+                            break # No need to check other params for this event
 
-                # 2. Dynamic Control Dependency Check
-                # Check if this event is controlled by an event already added in this pass.
+                # 3. Dynamic Control Dependency Check
                 all_ctrl_deps = set(stmt.get('control_dependencies', [])) | \
-                            set(stmt.get('inherited_control_dependencies', []))
+                                set(stmt.get('inherited_control_dependencies', []))
                 if any(abs(c_id) in pass_control_sources for c_id in all_ctrl_deps):
                     is_control_dependent = True
                 
-                # Add statement to slice if it's affected by data or control flow
+                # Add statement to slice and propagate its effects
                 if is_data_dependent or is_control_dependent or current_id == start_event_id:
                     slice_event_ids.add(current_id)
-                    pass_control_sources.add(current_id) # It can now control subsequent events in this pass.
+                    pass_control_sources.add(current_id)
 
-                    # The variables *defined* by this statement are now considered affected
-                    vars_defined = stmt.get('vars_defined', [])
-                    scoped_vars_defined = {(var, current_scope_id) for var in vars_defined}
-                    pass_affected_vars.update(scoped_vars_defined)
-                    newly_affected_vars.update(scoped_vars_defined)
+                    # Propagate defined variables for Line events
+                    if stmt['event_type'] == 'Line':
+                        vars_defined = stmt.get('vars_defined', [])
+                        scoped_vars_defined = {(var, current_scope_id) for var in vars_defined}
+                        pass_affected_vars.update(scoped_vars_defined)
+                        newly_affected_vars.update(scoped_vars_defined)
 
-                    # --- Interprocedural Data Dependency Propagation (Forward) ---
-                    if current_id in call_site_to_func_map:
-                        func_event = call_site_to_func_map[current_id]
-                        func_scope_id = func_event['event_id']
-                        call_args = stmt.get('vars_used', [])
-                        func_params = func_event.get('params', [])
-                        for arg, param in zip(call_args, func_params):
-                            if (arg, current_scope_id) in pass_affected_vars:
-                                scoped_param = (param, func_scope_id)
-                                if scoped_param not in pass_affected_vars:
-                                    pass_affected_vars.add(scoped_param)
-                                    newly_affected_vars.add(scoped_param)
-
-                    if stmt['event_type'] == 'Return' and current_id in return_to_call_site_map:
+                    # Propagate return values for Return events
+                    elif stmt['event_type'] == 'Return' and current_id in return_to_call_site_map:
                         call_site_event = return_to_call_site_map[current_id]
                         call_site_scope_id = scope_map.get(call_site_event['event_id'], -1)
                         returned_vars = stmt.get('vars_used', [])
+                        
+                        # Check if the returned variable was affected
                         if returned_vars and (returned_vars[0], current_scope_id) in pass_affected_vars:
                             assigned_vars = call_site_event.get('vars_defined', [])
                             if assigned_vars:
@@ -248,7 +259,7 @@ def forward_slice(trace: List[Dict], start_event_id: int, target_vars: List[str]
                                 if scoped_assigned_var not in pass_affected_vars:
                                     pass_affected_vars.add(scoped_assigned_var)
                                     newly_affected_vars.add(scoped_assigned_var)
-                                            
+                                                                                
             # --- Check for Convergence ---
             # If this pass did not discover any new affected variables, we are done.
             if not (newly_affected_vars - cumulative_affected_vars):
