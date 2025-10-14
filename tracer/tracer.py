@@ -22,7 +22,7 @@ def trace(prefix: str = ""):
     def decorator(func):
         if inspect.iscoroutinefunction(func):
             @wraps(func)
-            async def wrapper(*args, **kwargs):
+            async def wrapper(*args, **kwargs): # type: ignore
                 sig = call_signature(func, *args, **kwargs)
                 with ExecutionTracer(os.path.join(prefix, sig + ".jsonl")):
                     return await func(*args, **kwargs)
@@ -43,21 +43,13 @@ class ExecutionTracer:
         self.max_depth = 0
         self.trace_data = []
         self.output_file = output_file
-        self.source_cache = {}  # Cache for source file contents
+        self.source_cache = {} 
         self.event_id = 0
         self.control_stack = []
         self.inherited_control_stack = []
-        self.control_stack_stack = []  # Stack for managing control_stack across calls
-        
-        # Map: qualified_function_name -> { var_name -> last_def_event_id }
-        # This is used to track where variables were last defined (per-function)
+        self.control_stack_stack = []     
         self.last_def_event = defaultdict(dict)
-        
-        # Keep track of the most recent Line event per frame so we can
-        # fill in seen_variables AFTER the line executes.
         self._pending_line_events = {}
-        
-        # Stack of variable dictionaries, one per function call
         self.function_variables_stack = []
         
         # Standard library modules to exclude
@@ -112,9 +104,7 @@ class ExecutionTracer:
         if not source_line or not source_line.strip():
             return [], []
 
-        # Remove comments safely so colon-trick and AST parsing work
         code_no_comments = self._strip_comments_preserving_strings(source_line).rstrip()
-        # Keep a final fallback to the original stripped form
         stripped = code_no_comments.strip()
         if not stripped:
             return [], []
@@ -208,16 +198,12 @@ class ExecutionTracer:
         """
         try:
             tokens = []
-            # generate_tokens yields namedtuple with .type and .string in Python 3
             for tok in tokenize.generate_tokens(io.StringIO(line).readline):
-                # Skip comment tokens
                 if tok.type == tokenize.COMMENT:
                     continue
                 tokens.append((tok.type, tok.string))
-            # Reconstruct source without comment tokens
             return tokenize.untokenize(tokens)
         except Exception:
-            # Fallback: naive split but only if tokenize failed
             return line.split('#', 1)[0]
 
     def _get_call_arg_varnames_from_call_line(self, source_line: str, callee_func_name: str):
@@ -281,11 +267,9 @@ class ExecutionTracer:
     def _serialize_value(self, value: Any) -> Any:
         """Serialize a value for JSON output"""
         try:
-            # Try JSON serialization first
             json.dumps(value)
             return value
         except (TypeError, ValueError):
-            # Fall back to string representation
             return f"<non-serializable: {type(value).__name__}>"
 
     def _serialize_dict_values(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -303,12 +287,12 @@ class ExecutionTracer:
                 params[name] = self._serialize_value(frame.f_locals[name])
         
         # Handle *args and **kwargs
-        if code.co_flags & 0x04:  # CO_VARARGS
+        if code.co_flags & 0x04: 
             varargs_name = code.co_varnames[code.co_argcount]
             if varargs_name in frame.f_locals:
                 params['*' + varargs_name] = self._serialize_value(frame.f_locals[varargs_name])
                 
-        if code.co_flags & 0x08:  # CO_VARKEYWORDS
+        if code.co_flags & 0x08: 
             kwargs_index = code.co_argcount
             if code.co_flags & 0x04:  # also has *args
                 kwargs_index += 1
@@ -404,25 +388,21 @@ class ExecutionTracer:
 
         if event == 'call':
             caller_snapshot = []
-            # include caller's local controls
             caller_snapshot.extend([dict(e) for e in self.control_stack])
-            # include everything caller already inherited
             if self.inherited_control_stack:
                 caller_snapshot.extend([dict(e) for e in self.inherited_control_stack[-1]])
             self.inherited_control_stack.append(caller_snapshot)
-            self.control_stack_stack.append(self.control_stack) # Save the caller's stack
-            self.control_stack = []  # reset on new function entry
+            self.control_stack_stack.append(self.control_stack)
+            self.control_stack = []
 
-            # --- existing call handling unchanged (depth / vars stack) ---
             current_depth = len(self.call_stack)
             self.max_depth = max(self.max_depth, current_depth)
 
-            # serialize parameters for JSON output (existing helper)
             parameters = self._get_function_parameters(frame)
             func_vars = dict(parameters)
             self.function_variables_stack.append(func_vars)
 
-                        # --- NEW: compute parameter_sources (best-effort)
+            # compute parameter_sources (best-effort)
             # Strategy:
             # 1) Parse the caller source line to find the call AST and extract variables
             #    used in each argument expression (positional and keyword).
@@ -525,8 +505,8 @@ class ExecutionTracer:
             self._add_trace_entry(
                 'Function',
                 frame,
-                function_name=func_info['qualified_name'],  # ← callee (correct scope)
-                caller_name=self.call_stack[-2]['qualified_name'] if len(self.call_stack) > 1 else "<module>",  # ← new field
+                function_name=func_info['qualified_name'],
+                caller_name=self.call_stack[-2]['qualified_name'] if len(self.call_stack) > 1 else "<module>",
                 parameters=parameters,
                 parameter_sources=parameter_sources,
                 inherited_control_dependencies=[
@@ -633,19 +613,15 @@ class ExecutionTracer:
                         inherited_ids.append(-tid)
                     else:
                         inherited_ids.append(tid)
-
-                        # Use a comment-free version for parsing/eval (but keep indent based on original)
             line_no_comments = self._strip_comments_preserving_strings(source_line)
             stripped_no_comments = line_no_comments.strip()
 
             # For AST, var-use detection etc already uses get_vars_defined_and_used -> which uses stripped_no_comments
-
             # When deciding if this line is a control header, use stripped_no_comments
             m = re.match(r'^(if|elif|for|while|with)\b', stripped_no_comments)
             if m:
                 keyword = m.group(1)
 
-                # capture event id to push later
                 current_event_id = self.event_id
 
                 truth_value = None
@@ -679,7 +655,6 @@ class ExecutionTracer:
                 except Exception:
                     truth_value = False
 
-                # Add the Line event (control_deps computed from current control_stack)
                 seen_variables = self._get_current_seen_variables()
                 self._add_trace_entry(
                     'Line',
@@ -693,13 +668,11 @@ class ExecutionTracer:
                 
                 self._pending_line_events[frame] = self.trace_data[-1]
 
-                # Record last-definition event ids for any variables defined on this line
                 if vars_defined:
                     cur_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
                     for v in vars_defined:
                         self.last_def_event[cur_qualified][v] = self.event_id - 1
 
-                # Now push the control entry using the event id assigned above
                 self.control_stack.append({
                     'indent': indent,
                     'id': current_event_id,
@@ -780,6 +753,6 @@ class ExecutionTracer:
             'max_call_depth': self.max_depth,
             'unique_functions': len(self.call_graph),
             'output_file': self.output_file,
-            'call_graph': dict(self.call_graph),  # Add this
-            'call_counts': dict(self.call_counts)  # And this
+            'call_graph': dict(self.call_graph),
+            'call_counts': dict(self.call_counts)  
         }
