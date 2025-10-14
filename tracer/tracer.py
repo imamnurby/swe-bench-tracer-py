@@ -277,7 +277,7 @@ class ExecutionTracer:
             json.dumps(value)
             return value
         except (TypeError, ValueError):
-            return f"<non-serializable: {type(value).__name__}>"
+            return jsonpickle.encode(value)
 
     def _serialize_dict_values(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Serialize each value in a dictionary."""
