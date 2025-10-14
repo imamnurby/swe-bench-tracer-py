@@ -534,7 +534,7 @@ class ExecutionTracer:
             if self.call_stack:
                 self.call_stack.pop()
                 source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
-                _, vars_used = self._get_vars_defined_and_used(source_line)                # Finalize any last line still pending for this frame
+                _, vars_used = self._get_vars_defined_and_used(source_line)
                 if frame in self._pending_line_events:
                     prev_event = self._pending_line_events.pop(frame)
                     prev_event['seen_variables'] = self._serialize_dict_values(dict(frame.f_locals))
@@ -546,19 +546,17 @@ class ExecutionTracer:
                 self._add_trace_entry(
                     'Return',
                     frame,
-                    function_name=returning_func_name,   # ← callee (the one returning)
+                    function_name=returning_func_name, 
                     vars_used=vars_used,
-                    caller_name=caller_name_after_return, # ← who we return to
+                    caller_name=caller_name_after_return,
                     return_value=self._serialize_value(arg)
                 )
 
         elif event == 'line':
             if frame in self._pending_line_events:
                 prev_event = self._pending_line_events.pop(frame)
-                # capture the now-up-to-date locals
                 prev_event['seen_variables'] = self._serialize_dict_values(dict(frame.f_locals))
                 
-            # Update local variables first (as before)
             self._update_function_variables(frame)
             filename = frame.f_code.co_filename
             line_no = frame.f_lineno
@@ -567,10 +565,8 @@ class ExecutionTracer:
             if source_line.strip().startswith('try:'):
                 return self._trace_function
             
-            # Vars defined / used (AST)
             vars_defined, vars_used = self._get_vars_defined_and_used(source_line)
 
-            # Indentation + stripped form
             indent = self._line_indent(source_line)
             stripped = source_line.strip()
 
