@@ -8,10 +8,17 @@ import io, tokenize
 import inspect
 
 from collections import defaultdict
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional, Set, Match, Callable
+from types import FrameType
 from functools import wraps
 from pathlib import Path
 from tracer.util import get_func_qualname, call_signature, sanitize_for_json
+
+import jsonpickle
+import jsonpickle.ext.numpy as jsonpickle_numpy
+import jsonpickle.ext.pandas as jsonpickle_pandas
+jsonpickle_numpy.register_handlers()
+jsonpickle_pandas.register_handlers()
 
 def trace(prefix: str = ""):
     '''
@@ -22,7 +29,7 @@ def trace(prefix: str = ""):
     def decorator(func):
         if inspect.iscoroutinefunction(func):
             @wraps(func)
-            async def wrapper(*args, **kwargs):
+            async def wrapper(*args, **kwargs): # type: ignore
                 sig = call_signature(func, *args, **kwargs)
                 with ExecutionTracer(os.path.join(prefix, sig + ".jsonl")):
                     return await func(*args, **kwargs)
@@ -43,21 +50,13 @@ class ExecutionTracer:
         self.max_depth = 0
         self.trace_data = []
         self.output_file = output_file
-        self.source_cache = {}  # Cache for source file contents
+        self.source_cache = {} 
         self.event_id = 0
         self.control_stack = []
         self.inherited_control_stack = []
-        self.control_stack_stack = []  # Stack for managing control_stack across calls
-        
-        # Map: qualified_function_name -> { var_name -> last_def_event_id }
-        # This is used to track where variables were last defined (per-function)
+        self.control_stack_stack = []     
         self.last_def_event = defaultdict(dict)
-        
-        # Keep track of the most recent Line event per frame so we can
-        # fill in seen_variables AFTER the line executes.
         self._pending_line_events = {}
-        
-        # Stack of variable dictionaries, one per function call
         self.function_variables_stack = []
         
         # Standard library modules to exclude
@@ -112,9 +111,7 @@ class ExecutionTracer:
         if not source_line or not source_line.strip():
             return [], []
 
-        # Remove comments safely so colon-trick and AST parsing work
         code_no_comments = self._strip_comments_preserving_strings(source_line).rstrip()
-        # Keep a final fallback to the original stripped form
         stripped = code_no_comments.strip()
         if not stripped:
             return [], []
@@ -149,7 +146,7 @@ class ExecutionTracer:
         )
         return line.strip().startswith(keywords)
     
-    def _should_ignore(self, filename):
+    def _should_ignore(self, filename: str)->bool:
         """Check if the call is from a standard library or test framework"""
         if not filename:
             return False
@@ -208,19 +205,15 @@ class ExecutionTracer:
         """
         try:
             tokens = []
-            # generate_tokens yields namedtuple with .type and .string in Python 3
             for tok in tokenize.generate_tokens(io.StringIO(line).readline):
-                # Skip comment tokens
                 if tok.type == tokenize.COMMENT:
                     continue
                 tokens.append((tok.type, tok.string))
-            # Reconstruct source without comment tokens
             return tokenize.untokenize(tokens)
         except Exception:
-            # Fallback: naive split but only if tokenize failed
             return line.split('#', 1)[0]
 
-    def _get_call_arg_varnames_from_call_line(self, source_line: str, callee_func_name: str):
+    def _get_call_arg_varnames_from_call_line(self, source_line: str, callee_func_name: str)->Tuple[List, Dict]:
         """
         Parse a single source line and, if it contains a call to `callee_func_name`,
         return a tuple (positional_arg_varlists, keyword_arg_varmap).
@@ -281,18 +274,16 @@ class ExecutionTracer:
     def _serialize_value(self, value: Any) -> Any:
         """Serialize a value for JSON output"""
         try:
-            # Try JSON serialization first
             json.dumps(value)
             return value
         except (TypeError, ValueError):
-            # Fall back to string representation
-            return f"<non-serializable: {type(value).__name__}>"
+            return jsonpickle.encode(value)
 
     def _serialize_dict_values(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Serialize each value in a dictionary."""
         return {key: self._serialize_value(value) for key, value in data.items()}
     
-    def _get_function_parameters(self, frame) -> Dict[str, Any]:
+    def _get_function_parameters(self, frame: FrameType) -> Dict[str, Any]:
         """Extract function parameters and their values"""
         code = frame.f_code
         param_names = code.co_varnames[:code.co_argcount]
@@ -303,12 +294,12 @@ class ExecutionTracer:
                 params[name] = self._serialize_value(frame.f_locals[name])
         
         # Handle *args and **kwargs
-        if code.co_flags & 0x04:  # CO_VARARGS
+        if code.co_flags & 0x04: 
             varargs_name = code.co_varnames[code.co_argcount]
             if varargs_name in frame.f_locals:
                 params['*' + varargs_name] = self._serialize_value(frame.f_locals[varargs_name])
                 
-        if code.co_flags & 0x08:  # CO_VARKEYWORDS
+        if code.co_flags & 0x08: 
             kwargs_index = code.co_argcount
             if code.co_flags & 0x04:  # also has *args
                 kwargs_index += 1
@@ -324,7 +315,7 @@ class ExecutionTracer:
             return self.call_stack[-1]['qualified_name']
         return "<module>"
         
-    def _get_function_info(self, frame):
+    def _get_function_info(self, frame: FrameType)->Dict[str, Any]:
         """Extract detailed function information"""
         func_name = frame.f_code.co_name
         func_qualname = get_func_qualname(frame)
@@ -351,7 +342,7 @@ class ExecutionTracer:
             'line_no': line_no
         }
     
-    def _update_function_variables(self, frame):
+    def _update_function_variables(self, frame: FrameType)->None:
         """Update the current function's variable dictionary with local variables"""
         if not self.function_variables_stack:
             return
@@ -373,7 +364,7 @@ class ExecutionTracer:
             return dict(copy.deepcopy(self.function_variables_stack[-1]))
         return {}
     
-    def _add_trace_entry(self, event_type: str, frame, **kwargs):
+    def _add_trace_entry(self, event_type: str, frame: FrameType, **kwargs)->None:
         """Add a structured trace entry"""
         filename = frame.f_code.co_filename
         line_no = frame.f_lineno
@@ -392,357 +383,390 @@ class ExecutionTracer:
         self.event_id += 1
         
         self.trace_data.append(entry)
-        
-    def _trace_function(self, frame, event, arg):
+
+    def _trace_function(self, frame: FrameType, event: str, arg: Any) -> Optional[Callable]:
+        """The main tracing callback that dispatches events to their respective handlers."""
+    
         if event == 'call' and frame.f_locals.get('self') is self:
             return None
-        
-        func_info = self._get_function_info(frame)
 
+        func_info = self._get_function_info(frame)
         if self._should_ignore(func_info['filename']):
             return self._trace_function
-
+        
         if event == 'call':
-            caller_snapshot = []
-            # include caller's local controls
-            caller_snapshot.extend([dict(e) for e in self.control_stack])
-            # include everything caller already inherited
-            if self.inherited_control_stack:
-                caller_snapshot.extend([dict(e) for e in self.inherited_control_stack[-1]])
-            self.inherited_control_stack.append(caller_snapshot)
-            self.control_stack_stack.append(self.control_stack) # Save the caller's stack
-            self.control_stack = []  # reset on new function entry
-
-            # --- existing call handling unchanged (depth / vars stack) ---
-            current_depth = len(self.call_stack)
-            self.max_depth = max(self.max_depth, current_depth)
-
-            # serialize parameters for JSON output (existing helper)
-            parameters = self._get_function_parameters(frame)
-            func_vars = dict(parameters)
-            self.function_variables_stack.append(func_vars)
-
-                        # --- NEW: compute parameter_sources (best-effort)
-            # Strategy:
-            # 1) Parse the caller source line to find the call AST and extract variables
-            #    used in each argument expression (positional and keyword).
-            # 2) Map those variable names to their last-definition event id recorded
-            #    for the caller-qualified scope.
-            # 3) If no variables are found (e.g. literal-only arg or parse failed),
-            #    fall back to the previous identity/equality heuristic.
-            parameter_sources = {}
-            # caller frame is the previous stack frame (may be None for some calls)
-            caller_frame = frame.f_back
-            caller_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
-
-            # Raw parameter names from callee code object (handle basic args only; extend if needed)
-            code = frame.f_code
-            param_count = code.co_argcount
-            param_names = list(code.co_varnames[:param_count])
-
-            # handle positional varargs and kwargs names if present
-            idx = param_count
-            varargs_name = None
-            kwargs_name = None
-            if code.co_flags & 0x04:  # CO_VARARGS
-                varargs_name = code.co_varnames[idx]
-                param_names.append(varargs_name)
-                idx += 1
-            if code.co_flags & 0x08:  # CO_VARKEYWORDS
-                kwargs_name = code.co_varnames[idx]
-                param_names.append(kwargs_name)
-
-            # Attempt to parse the caller's source line and extract variable names used
-            pos_arg_vars, kw_arg_vars = [], {}
-            try:
-                if caller_frame is not None:
-                    caller_src = self._get_source_line(caller_frame.f_code.co_filename, caller_frame.f_lineno)
-                    pos_arg_vars, kw_arg_vars = self._get_call_arg_varnames_from_call_line(caller_src, func_info['func_name'])
-            except Exception:
-                pos_arg_vars, kw_arg_vars = [], {}
-
-            # Map parameters -> list of variable names that appear in the corresponding arg expression
-            fixed_count = param_count
-            for i, pname in enumerate(param_names):
-                found_varnames = []
-
-                # 1) If the argument was passed as a keyword (e.g. B(k=x+1)), use that mapping
-                if pname in kw_arg_vars:
-                    found_varnames = kw_arg_vars.get(pname, []) or []
-                # 2) Positional mapping for fixed parameters
-                elif i < fixed_count:
-                    if i < len(pos_arg_vars):
-                        found_varnames = pos_arg_vars[i] or []
-                # 3) varargs: collect any remaining positional args beyond the fixed arity
-                elif varargs_name is not None and pname == varargs_name:
-                    extra = pos_arg_vars[fixed_count:] if len(pos_arg_vars) > fixed_count else []
-                    agg = []
-                    for sub in extra:
-                        agg.extend(sub)
-                    found_varnames = agg
-                # 4) kwargs expansion (**kwargs) — best-effort: include any kw expansion varnames
-                elif kwargs_name is not None and pname == kwargs_name:
-                    found_varnames = kw_arg_vars.get('__KW_EXPANSION__', []) or []
-
-                # 5) Fallback to identity/equality heuristic if we didn't find any variable names
-                if not found_varnames and caller_frame is not None:
-                    raw_val = frame.f_locals.get(pname, None)
-                    found_names = []
-                    for cname, cval in caller_frame.f_locals.items():
-                        try:
-                            if raw_val is cval:
-                                found_names.append(cname)
-                            elif raw_val == cval:
-                                found_names.append(cname)
-                        except Exception:
-                            # ignore comparison errors
-                            pass
-                    # deduplicate while preserving ordering
-                    found_varnames = list(dict.fromkeys(found_names))
-
-                # 6) Convert variable names -> {var, event_id} objects, or None if empty
-                if found_varnames:
-                    mapped = []
-                    for vname in found_varnames:
-                        src_event = self.last_def_event.get(caller_qualified, {}).get(vname)
-                        mapped.append({"var": vname, "event_id": src_event})
-                    parameter_sources[pname] = mapped
-                else:
-                    parameter_sources[pname] = None
-
-            # update call graph info (existing)
-            if self.call_stack:
-                caller_info = self.call_stack[-1]
-                caller_name = caller_info['qualified_name']
-                callee_name = func_info['qualified_name']
-                self.call_graph[caller_name].add(callee_name)
-                self.call_counts[(caller_name, callee_name)] += 1
-
-            # push callee onto the call stack (existing)
-            self.call_stack.append(func_info)
-
-            # add the Function entry — include parameter_sources
-            self._add_trace_entry(
-                'Function',
-                frame,
-                function_name=func_info['qualified_name'],  # ← callee (correct scope)
-                caller_name=self.call_stack[-2]['qualified_name'] if len(self.call_stack) > 1 else "<module>",  # ← new field
-                parameters=parameters,
-                parameter_sources=parameter_sources,
-                inherited_control_dependencies=[
-                    e['id'] if e.get('truth') is not False else -e['id']
-                    for e in caller_snapshot
-                ]
-            )
-
-            # Record that the callee's parameters are "defined" by the Function event we just emitted.
-            # Use the Function event's id = self.event_id - 1
-            callee_qualified = func_info['qualified_name']
-            for pname in param_names:
-                # note: we record only the parameter name (they are locals of the callee)
-                self.last_def_event[callee_qualified][pname] = self.event_id - 1
-
+            self._handle_call_event(frame, func_info)
         elif event == 'return':
-            if self.control_stack_stack:
-                self.control_stack = self.control_stack_stack.pop() # Restore caller's stack
-            else:
-                self.control_stack = [] # Fallback for safety
-            # Capture callee name BEFORE popping
-            returning_func_name = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
-            caller_name_after_return = self.call_stack[-2]['qualified_name'] if len(self.call_stack) > 1 else "<module>" if len(self.call_stack) == 1 else None
-
-            if self.call_stack:
-                self.call_stack.pop()
-                source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
-                _, vars_used = self._get_vars_defined_and_used(source_line)                # Finalize any last line still pending for this frame
-                if frame in self._pending_line_events:
-                    prev_event = self._pending_line_events.pop(frame)
-                    prev_event['seen_variables'] = self._serialize_dict_values(dict(frame.f_locals))
-                
-                if self.function_variables_stack:
-                    self.function_variables_stack.pop()
-                if self.inherited_control_stack:
-                    self.inherited_control_stack.pop()
-                self._add_trace_entry(
-                    'Return',
-                    frame,
-                    function_name=returning_func_name,   # ← callee (the one returning)
-                    vars_used=vars_used,
-                    caller_name=caller_name_after_return, # ← who we return to
-                    return_value=self._serialize_value(arg)
-                )
-
+            self._handle_return_event(frame, arg)
         elif event == 'line':
-            if frame in self._pending_line_events:
-                prev_event = self._pending_line_events.pop(frame)
-                # capture the now-up-to-date locals
-                prev_event['seen_variables'] = self._serialize_dict_values(dict(frame.f_locals))
-                
-            # Update local variables first (as before)
-            self._update_function_variables(frame)
-            filename = frame.f_code.co_filename
-            line_no = frame.f_lineno
-            source_line = self._get_source_line(filename, line_no)
-
-            if source_line.strip().startswith('try:'):
-                return self._trace_function
-            
-            # Vars defined / used (AST)
-            vars_defined, vars_used = self._get_vars_defined_and_used(source_line)
-
-            # Indentation + stripped form
-            indent = self._line_indent(source_line)
-            stripped = source_line.strip()
-
-            # Hybrid pop rule:
-            # - For elif/else/except/finally, we do NOT pop same-level control entries
-            #   because they are part of the same conditional chain.
-            is_elif_else = stripped.startswith(('elif', 'else', 'except', 'finally'))
-            if is_elif_else:
-                # pop only strictly deeper blocks (indent < top)
-                while self.control_stack and indent < self.control_stack[-1]['indent']:
-                    self.control_stack.pop()
-            else:
-                # normal: pop blocks at same-or-deeper indent (we've left them)
-                while self.control_stack and indent <= self.control_stack[-1]['indent']:
-                    self.control_stack.pop()
-
-            # Build control dependencies from current control stack:
-            # positive id => condition True, negative id => condition False
-            control_deps = []
-            for entry in self.control_stack:
-                eid = entry['id']
-                truth = entry.get('truth')
-                if truth is True:
-                    control_deps.append(eid)
-                elif truth is False:
-                    control_deps.append(-eid)
-                else:
-                    # For constructs where we don't/easily evaluate a truth value (e.g. a 'with'),
-                    # include the positive id by default.
-                    control_deps.append(eid)
-            
-            inherited_ids = []
-            if self.inherited_control_stack:
-                for e in self.inherited_control_stack[-1]:
-                    tid = e.get('id')
-                    ttruth = e.get('truth')
-                    if ttruth is True:
-                        inherited_ids.append(tid)
-                    elif ttruth is False:
-                        inherited_ids.append(-tid)
-                    else:
-                        inherited_ids.append(tid)
-
-                        # Use a comment-free version for parsing/eval (but keep indent based on original)
-            line_no_comments = self._strip_comments_preserving_strings(source_line)
-            stripped_no_comments = line_no_comments.strip()
-
-            # For AST, var-use detection etc already uses get_vars_defined_and_used -> which uses stripped_no_comments
-
-            # When deciding if this line is a control header, use stripped_no_comments
-            m = re.match(r'^(if|elif|for|while|with)\b', stripped_no_comments)
-            if m:
-                keyword = m.group(1)
-
-                # capture event id to push later
-                current_event_id = self.event_id
-
-                truth_value = None
-                try:
-                    if keyword in ('if', 'elif', 'while'):
-                        cond_m = re.match(r'^(?:if|elif|while)\s+(.*):\s*$', stripped_no_comments)
-                        if cond_m:
-                            cond_text = cond_m.group(1)
-                            try:
-                                cond_eval = eval(compile(cond_text, '<cond>', 'eval'),
-                                                frame.f_globals, frame.f_locals)
-                                truth_value = bool(cond_eval)
-                            except Exception:
-                                truth_value = False
-                        else:
-                            truth_value = False
-                    elif keyword == 'for':
-                        for_m = re.match(r'^for\s+.*\s+in\s+(.*):\s*$', stripped_no_comments)
-                        if for_m:
-                            iterable_text = for_m.group(1)
-                            try:
-                                iterable_val = eval(compile(iterable_text, '<iter>', 'eval'),
-                                                    frame.f_globals, frame.f_locals)
-                                truth_value = bool(iterable_val)
-                            except Exception:
-                                truth_value = False
-                        else:
-                            truth_value = False
-                    elif keyword == 'with':
-                        truth_value = True
-                except Exception:
-                    truth_value = False
-
-                # Add the Line event (control_deps computed from current control_stack)
-                seen_variables = self._get_current_seen_variables()
-                self._add_trace_entry(
-                    'Line',
-                    frame,
-                    vars_defined=vars_defined,
-                    vars_used=vars_used,
-                    control_dependencies=control_deps,
-                    inherited_control_dependencies=inherited_ids,
-                    seen_variables=seen_variables
-                )
-                
-                self._pending_line_events[frame] = self.trace_data[-1]
-
-                # Record last-definition event ids for any variables defined on this line
-                if vars_defined:
-                    cur_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
-                    for v in vars_defined:
-                        self.last_def_event[cur_qualified][v] = self.event_id - 1
-
-                # Now push the control entry using the event id assigned above
-                self.control_stack.append({
-                    'indent': indent,
-                    'id': current_event_id,
-                    'truth': truth_value
-                })
-
-            else:
-                # Normal non-control line: just record it with the active control_deps
-                seen_variables = self._get_current_seen_variables()
-                self._add_trace_entry(
-                    'Line',
-                    frame,
-                    vars_defined=vars_defined,
-                    vars_used=vars_used,
-                    control_dependencies=control_deps,
-                    inherited_control_dependencies=inherited_ids,
-                    seen_variables=seen_variables
-                )
-                
-                self._pending_line_events[frame] = self.trace_data[-1]
-
-                # Record last-definition event ids for any variables defined on this line
-                if vars_defined:
-                    cur_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
-                    for v in vars_defined:
-                        self.last_def_event[cur_qualified][v] = self.event_id - 1
-
+            self._handle_line_event(frame)
         elif event == 'exception':
-            if self.call_stack:
-                exc_type, exc_value, exc_tb = arg
-                source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
-                _, vars_used = self._get_vars_defined_and_used(source_line)
-                    
-                self._add_trace_entry(
-                    'Exception',
-                    frame,
-                    exception_type=exc_type.__name__,
-                    exception_value=str(exc_value),
-                    vars_used=vars_used or None
-                )
-
+            self._handle_exception_event(frame, arg)
         return self._trace_function
     
+    def _handle_call_event(self, frame: FrameType, func_info: Dict[str, Any]) -> None:
+        """Handles a 'call' event by managing stacks, computing parameter sources, and recording function entry."""
+        caller_snapshot = self._snapshot_caller_context()
+        self._prepare_call_stacks()
+        parameters = self._get_function_parameters(frame)
+        func_vars = dict(parameters)
+        self.function_variables_stack.append(func_vars)
+        parameter_sources = self._compute_parameter_sources(frame, func_info)
+        self._update_call_graph(func_info)
+        self.call_stack.append(func_info)
+        self._record_function_entry(frame, func_info, parameters, parameter_sources, caller_snapshot)
+
+
+    def _snapshot_caller_context(self) -> List[Dict[str, Any]]:
+        """Creates a snapshot of the current and inherited control stacks for the calling context."""
+        caller_snapshot = [dict(e) for e in self.control_stack]
+        if self.inherited_control_stack:
+            caller_snapshot.extend([dict(e) for e in self.inherited_control_stack[-1]])
+        self.inherited_control_stack.append(caller_snapshot)
+        return caller_snapshot
+
+
+    def _prepare_call_stacks(self) -> None:
+        """Prepares the control and call stacks for a new function call and updates max depth."""
+        self.control_stack_stack.append(self.control_stack)
+        self.control_stack = []
+
+        current_depth = len(self.call_stack)
+        self.max_depth = max(self.max_depth, current_depth)
+
+
+    def _compute_parameter_sources(self, frame: FrameType, func_info: Dict[str, Any]) -> Dict[str, Optional[List[Dict[str, Any]]]]:
+        """Determines the source variables in the caller's frame for each parameter of the current function."""
+        parameter_sources = {}
+
+        caller_frame = frame.f_back
+        caller_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
+
+        code = frame.f_code
+        param_count = code.co_argcount
+        param_names = list(code.co_varnames[:param_count])
+
+        idx = param_count
+        varargs_name = None
+        kwargs_name = None
+        if code.co_flags & 0x04:  # CO_VARARGS
+            varargs_name = code.co_varnames[idx]
+            param_names.append(varargs_name)
+            idx += 1
+        if code.co_flags & 0x08:  # CO_VARKEYWORDS
+            kwargs_name = code.co_varnames[idx]
+            param_names.append(kwargs_name)
+
+        # Parse caller source
+        pos_arg_vars, kw_arg_vars = [], {}
+        try:
+            if caller_frame is not None:
+                caller_src = self._get_source_line(caller_frame.f_code.co_filename, caller_frame.f_lineno)
+                pos_arg_vars, kw_arg_vars = self._get_call_arg_varnames_from_call_line(
+                    caller_src, func_info['func_name']
+                )
+        except Exception:
+            pos_arg_vars, kw_arg_vars = [], {}
+
+        fixed_count = param_count
+        for i, pname in enumerate(param_names):
+            found_varnames = []
+
+            if pname in kw_arg_vars:
+                found_varnames = kw_arg_vars.get(pname, []) or []
+            elif i < fixed_count:
+                if i < len(pos_arg_vars):
+                    found_varnames = pos_arg_vars[i] or []
+            elif varargs_name is not None and pname == varargs_name:
+                extra = pos_arg_vars[fixed_count:] if len(pos_arg_vars) > fixed_count else []
+                agg = []
+                for sub in extra:
+                    agg.extend(sub)
+                found_varnames = agg
+            elif kwargs_name is not None and pname == kwargs_name:
+                found_varnames = kw_arg_vars.get('__KW_EXPANSION__', []) or []
+
+            # Fallback heuristic
+            if not found_varnames and caller_frame is not None:
+                raw_val = frame.f_locals.get(pname, None)
+                found_names = []
+                for cname, cval in caller_frame.f_locals.items():
+                    try:
+                        if raw_val is cval or raw_val == cval:
+                            found_names.append(cname)
+                    except Exception:
+                        pass
+                found_varnames = list(dict.fromkeys(found_names))
+
+            # Map varnames → event_id
+            if found_varnames:
+                mapped = []
+                for vname in found_varnames:
+                    src_event = self.last_def_event.get(caller_qualified, {}).get(vname)
+                    mapped.append({"var": vname, "event_id": src_event})
+                parameter_sources[pname] = mapped
+            else:
+                parameter_sources[pname] = None
+
+        return parameter_sources
+
+
+    def _update_call_graph(self, func_info: Dict[str, Any]) -> None:
+        """Updates the call graph by adding an edge from the caller to the callee."""
+        if self.call_stack:
+            caller_info = self.call_stack[-1]
+            caller_name = caller_info['qualified_name']
+            callee_name = func_info['qualified_name']
+            self.call_graph[caller_name].add(callee_name)
+            self.call_counts[(caller_name, callee_name)] += 1
+
+
+    def _record_function_entry(self, frame: FrameType, func_info: Dict[str, Any], parameters: Dict[str, Any], parameter_sources: Dict[str, Optional[List[Dict[str, Any]]]], caller_snapshot: List[Dict[str, Any]]) -> None:
+        """Records a 'Function' entry in the trace data and marks the definition event for its parameters."""
+        self._add_trace_entry(
+            'Function',
+            frame,
+            function_name=func_info['qualified_name'],
+            caller_name=self.call_stack[-2]['qualified_name'] if len(self.call_stack) > 1 else "<module>",
+            parameters=parameters,
+            parameter_sources=parameter_sources if parameter_sources else {},
+            inherited_control_dependencies=[
+                e['id'] if e.get('truth') is not False else -e['id']
+                for e in caller_snapshot
+            ]
+        )
+
+        # Mark callee parameter definitions
+        callee_qualified = func_info['qualified_name']
+        code = frame.f_code
+        param_count = code.co_argcount
+        param_names = list(code.co_varnames[:param_count])
+        if code.co_flags & 0x04:
+            param_names.append(code.co_varnames[param_count])
+            param_count += 1
+        if code.co_flags & 0x08:
+            param_names.append(code.co_varnames[param_count])
+
+        for pname in param_names:
+            self.last_def_event[callee_qualified][pname] = self.event_id - 1
+
+
+    def _handle_return_event(self, frame: FrameType, arg: Any) -> None:
+        """Handles a 'return' event by restoring caller state from stacks and recording the return."""
+        if self.control_stack_stack:
+            self.control_stack = self.control_stack_stack.pop()
+        else:
+            self.control_stack = []
+
+        returning_func_name = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
+        caller_name_after_return = (
+            self.call_stack[-2]['qualified_name']
+            if len(self.call_stack) > 1 else
+            "<module>" if len(self.call_stack) == 1 else None
+        )
+
+        if self.call_stack:
+            self.call_stack.pop()
+            source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
+            _, vars_used = self._get_vars_defined_and_used(source_line)
+            if frame in self._pending_line_events:
+                prev_event = self._pending_line_events.pop(frame)
+                prev_event['seen_variables'] = self._serialize_dict_values(dict(frame.f_locals))
+
+            if self.function_variables_stack:
+                self.function_variables_stack.pop()
+            if self.inherited_control_stack:
+                self.inherited_control_stack.pop()
+
+            self._add_trace_entry(
+                'Return',
+                frame,
+                function_name=returning_func_name,
+                vars_used=vars_used,
+                caller_name=caller_name_after_return,
+                return_value=self._serialize_value(arg)
+            )
+
+    def _handle_line_event(self, frame: FrameType) -> Optional[Callable]:
+        """Handles a 'line' event by analyzing the line and dispatching to control or regular line handlers."""
+        self._finalize_pending_line_event(frame)
+        self._update_function_variables(frame)
+
+        filename, line_no, source_line, stripped, stripped_no_comments, indent = self._compute_line_metadata(frame)
+        if stripped.startswith('try:'):
+            return self._trace_function
+
+        vars_defined, vars_used = self._get_vars_defined_and_used(source_line)
+        is_elif_else = stripped.startswith(('elif', 'else', 'except', 'finally'))
+
+        # Manage control stack indentation rules
+        self._update_control_stack_for_indent(indent, is_elif_else)
+
+        control_deps, inherited_ids = self._compute_control_dependencies()
+
+        # Determine if this is a control-header line (if/for/while/with)
+        m = re.match(r'^(if|elif|for|while|with)\b', stripped_no_comments)
+        if m:
+            self._handle_control_header_line(frame, m, vars_defined, vars_used, control_deps, inherited_ids,
+                                            stripped_no_comments, indent)
+        else:
+            self._handle_regular_line(frame, vars_defined, vars_used, control_deps, inherited_ids)
+
+    def _handle_exception_event(self, frame: FrameType, arg: Tuple[type, BaseException, Any]) -> None:
+        """Handles an 'exception' event by recording the exception details in the trace."""
+        if self.call_stack:
+            exc_type, exc_value, exc_tb = arg
+            source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
+            _, vars_used = self._get_vars_defined_and_used(source_line)
+
+            self._add_trace_entry(
+                'Exception',
+                frame,
+                exception_type=exc_type.__name__,
+                exception_value=str(exc_value),
+                vars_used=vars_used or None
+            )
+
+    def _finalize_pending_line_event(self, frame: FrameType) -> None:
+        """Updates the previously recorded pending line event with the final state of local variables."""
+        if frame in self._pending_line_events:
+            prev_event = self._pending_line_events.pop(frame)
+            prev_event['seen_variables'] = self._serialize_dict_values(dict(frame.f_locals))
+
+    def _compute_line_metadata(self, frame: FrameType) -> Tuple[str, int, str, str, str, int]:
+        """Gathers and computes metadata for the current line being executed, such as source and indentation."""
+        filename = frame.f_code.co_filename
+        line_no = frame.f_lineno
+        source_line = self._get_source_line(filename, line_no)
+        stripped = source_line.strip()
+        line_no_comments = self._strip_comments_preserving_strings(source_line)
+        stripped_no_comments = line_no_comments.strip()
+        indent = self._line_indent(source_line)
+        return filename, line_no, source_line, stripped, stripped_no_comments, indent
+
+
+    def _update_control_stack_for_indent(self, indent: int, is_elif_else: bool) -> None:
+        """Manages the control flow stack by popping entries based on changes in code indentation."""
+        if is_elif_else:
+            while self.control_stack and indent < self.control_stack[-1]['indent']:
+                self.control_stack.pop()
+        else:
+            while self.control_stack and indent <= self.control_stack[-1]['indent']:
+                self.control_stack.pop()
+
+
+    def _compute_control_dependencies(self) -> Tuple[List[int], List[int]]:
+        """Computes the list of current and inherited control dependencies for the current event."""
+        control_deps = []
+        for entry in self.control_stack:
+            eid = entry['id']
+            truth = entry.get('truth')
+            if truth is True:
+                control_deps.append(eid)
+            elif truth is False:
+                control_deps.append(-eid)
+            else:
+                control_deps.append(eid)
+
+        inherited_ids = []
+        if self.inherited_control_stack:
+            for e in self.inherited_control_stack[-1]:
+                tid = e.get('id')
+                ttruth = e.get('truth')
+                if ttruth is True:
+                    inherited_ids.append(tid)
+                elif ttruth is False:
+                    inherited_ids.append(-tid)
+                else:
+                    inherited_ids.append(tid)
+
+        return control_deps, inherited_ids
+
+
+    def _handle_control_header_line(self, frame: FrameType, match: Match[str], vars_defined: List[str], vars_used: List[str],
+                                    control_deps: List[int], inherited_ids: List[int], stripped_no_comments: str, indent: int) -> None:
+        """Handles a line that starts a control flow block, evaluating its condition and updating the control stack."""
+        keyword = match.group(1)
+        current_event_id = self.event_id
+
+        # Determine truth value (same logic)
+        truth_value = None
+        try:
+            if keyword in ('if', 'elif', 'while'):
+                cond_m = re.match(r'^(?:if|elif|while)\s+(.*):\s*$', stripped_no_comments)
+                if cond_m:
+                    cond_text = cond_m.group(1)
+                    try:
+                        cond_eval = eval(compile(cond_text, '<cond>', 'eval'),
+                                        frame.f_globals, frame.f_locals)
+                        truth_value = bool(cond_eval)
+                    except Exception:
+                        truth_value = False
+                else:
+                    truth_value = False
+            elif keyword == 'for':
+                for_m = re.match(r'^for\s+.*\s+in\s+(.*):\s*$', stripped_no_comments)
+                if for_m:
+                    iterable_text = for_m.group(1)
+                    try:
+                        iterable_val = eval(compile(iterable_text, '<iter>', 'eval'),
+                                            frame.f_globals, frame.f_locals)
+                        truth_value = bool(iterable_val)
+                    except Exception:
+                        truth_value = False
+                else:
+                    truth_value = False
+            elif keyword == 'with':
+                truth_value = True
+        except Exception:
+            truth_value = False
+
+        seen_variables = self._get_current_seen_variables()
+        self._add_trace_entry(
+            'Line',
+            frame,
+            vars_defined=vars_defined,
+            vars_used=vars_used,
+            control_dependencies=control_deps,
+            inherited_control_dependencies=inherited_ids,
+            seen_variables=seen_variables
+        )
+        self._pending_line_events[frame] = self.trace_data[-1]
+
+        if vars_defined:
+            self._update_last_definitions(vars_defined)
+
+        self.control_stack.append({
+            'indent': indent,
+            'id': current_event_id,
+            'truth': truth_value
+        })
+
+
+    def _handle_regular_line(self, frame: FrameType, vars_defined: List[str], vars_used: List[str], control_deps: List[int], inherited_ids: List[int]) -> None:
+        """Handles a regular line of code by recording a 'Line' event with its data dependencies."""
+        seen_variables = self._get_current_seen_variables()
+        self._add_trace_entry(
+            'Line',
+            frame,
+            vars_defined=vars_defined,
+            vars_used=vars_used,
+            control_dependencies=control_deps,
+            inherited_control_dependencies=inherited_ids,
+            seen_variables=seen_variables
+        )
+        self._pending_line_events[frame] = self.trace_data[-1]
+
+        if vars_defined:
+            self._update_last_definitions(vars_defined)
+
+
+    def _update_last_definitions(self, vars_defined: List[str]) -> None:
+        """Updates the mapping of variable names to the event ID where they were last defined."""
+        cur_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
+        for v in vars_defined:
+            self.last_def_event[cur_qualified][v] = self.event_id - 1
+
     def start_tracing(self):
         """Start the trace collection"""
         sys.settrace(self._trace_function)
@@ -780,6 +804,6 @@ class ExecutionTracer:
             'max_call_depth': self.max_depth,
             'unique_functions': len(self.call_graph),
             'output_file': self.output_file,
-            'call_graph': dict(self.call_graph),  # Add this
-            'call_counts': dict(self.call_counts)  # And this
+            'call_graph': dict(self.call_graph),
+            'call_counts': dict(self.call_counts)  
         }
