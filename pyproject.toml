@@ -3,6 +3,8 @@ name = "py-tracer"
 version = "0.1.0"
 dependencies = [
     "pytest",
+    "jsonpickle",
+    "pandas",
 ]
 
 [build-system]
