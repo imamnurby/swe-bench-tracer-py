@@ -1,10 +1,15 @@
-import re
 import sys
-import json
 import inspect
-import warnings
+import jsonpickle
+import orjson as json
+
+from jsonpickle.ext import numpy as jsonpickle_numpy
+from jsonpickle.ext import pandas as jsonpickle_pandas
 
 from types import CodeType, FrameType, GenericAlias
+
+jsonpickle_numpy.register_handlers()
+jsonpickle_pandas.register_handlers()
 
 def get_func_qualname(frame: FrameType) -> str:
     if sys.version_info >= (3, 11):
@@ -29,44 +34,20 @@ def get_func_qualname(frame: FrameType) -> str:
                     return f"{val.__qualname__}.<locals>.{frame.f_code.co_name}"
     return frame.f_code.co_name
 
-def short_repr(obj):
-    if obj is None:
-        return "None"
-    if isinstance(obj, (int, float, bool)):
-        return str(obj)
-    if isinstance(obj, (str, bytes)):
-        s = str(obj)
-        if len(s) > 10:
-            return s[:7] + "..."
-        return re.sub(r'\s+', '_', s)
-    if isinstance(obj, (list, tuple, set, frozenset)):
-        items = [short_repr(item) for item in list(obj)[:3]]
-        return f"{type(obj).__name__}({','.join(items)}{'...' if len(obj) > 5 else ''})"
-    return f"{type(obj).__name__}{hex(id(obj))}"
-
-def call_signature(func, *args, **kwargs):
-    sig = inspect.signature(func)
-    bound = sig.bind_partial(*args, **kwargs)
-    bound.apply_defaults()
-    parts = []
-    for name, value in bound.arguments.items():
-        parts.append(f"{name}={short_repr(value)}")
-    if len(parts) == 0:
-        base = f"{func.__module__}.{func.__qualname__}"
-    else:
-        base = f"{func.__module__}.{func.__qualname__}__" + "__".join(parts)
-    sanitized = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', base)
-    return sanitized[:120]
-
-def sanitize_for_json(data):
-    if isinstance(data, (int, float, str, bool, type(None))):
-        return data
-    if isinstance(data, dict):
-        return {key: sanitize_for_json(value) for key, value in data.items()}
-    if isinstance(data, (list, tuple, set)):
-        return [sanitize_for_json(item) for item in data]
+def sanitize_for_json(value):
+    def jsonpickle_fallback(obj):
+        try:
+            return json.loads(jsonpickle.encode(obj))
+        except Exception:
+            return f'<non-serializable: {type(obj).__name__}>'
     try:
-        json.dumps(data)
-        return data
-    except TypeError:
-        return f"<non-serializable: {type(data).__name__}>"
+        json.dumps(value)
+        return value
+    except Exception:
+        return jsonpickle_fallback(value)
+
+def safe_dump(obj):
+    return json.dumps(obj, default=sanitize_for_json).decode()
+
+def safe_serialize(obj):
+    return json.loads(json.dumps(obj, default=sanitize_for_json))

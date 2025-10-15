@@ -1,46 +1,16 @@
 import sys
 import os
 import ast
-import json
 import re
 import copy
 import io, tokenize
 import inspect
 
 from collections import defaultdict
-from typing import Any, Dict, List, Tuple, Optional, Set, Match, Callable
+from typing import Any, Dict, List, Tuple, Optional, Match, Callable
 from types import FrameType
-from functools import wraps
 from pathlib import Path
-from tracer.util import get_func_qualname, call_signature, sanitize_for_json
-
-import jsonpickle
-import jsonpickle.ext.numpy as jsonpickle_numpy
-import jsonpickle.ext.pandas as jsonpickle_pandas
-jsonpickle_numpy.register_handlers()
-jsonpickle_pandas.register_handlers()
-
-def trace(prefix: str = ""):
-    '''
-    Decorator to trace a function's execution and save to a JSONL file.
-    File name is derived from function signature and actual arguments.
-    Only put on top of the entry function to be traced.
-    '''
-    def decorator(func):
-        if inspect.iscoroutinefunction(func):
-            @wraps(func)
-            async def wrapper(*args, **kwargs): # type: ignore
-                sig = call_signature(func, *args, **kwargs)
-                with ExecutionTracer(os.path.join(prefix, sig + ".jsonl")):
-                    return await func(*args, **kwargs)
-        else:
-            @wraps(func)
-            def wrapper(*args, **kwargs):
-                sig = call_signature(func, *args, **kwargs)
-                with ExecutionTracer(os.path.join(prefix, sig + ".jsonl")):
-                    return func(*args, **kwargs)
-        return wrapper
-    return decorator
+from tracer.util import get_func_qualname, safe_serialize, safe_dump
 
 class ExecutionTracer:
     def __init__(self, output_file: str = "trace.jsonl"):
@@ -269,22 +239,6 @@ class ExecutionTracer:
                 return pos_arg_varlists, kw_arg_map
 
         return [], {}
-
-
-    def _serialize_value(self, value: Any) -> Any:
-        """Serialize a value for JSON output"""
-        try:
-            json.dumps(value)
-            return value
-        except (TypeError, ValueError):
-            try:
-                return json.loads(jsonpickle.encode(value))
-            except Exception:
-                return jsonpickle.encode(value)
-
-    def _serialize_dict_values(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Serialize each value in a dictionary."""
-        return {key: self._serialize_value(value) for key, value in data.items()}
     
     def _get_function_parameters(self, frame: FrameType) -> Dict[str, Any]:
         """Extract function parameters and their values"""
@@ -294,13 +248,13 @@ class ExecutionTracer:
         
         for name in param_names:
             if name in frame.f_locals:
-                params[name] = self._serialize_value(frame.f_locals[name])
+                params[name] = safe_serialize(frame.f_locals[name])
         
         # Handle *args and **kwargs
         if code.co_flags & 0x04: 
             varargs_name = code.co_varnames[code.co_argcount]
             if varargs_name in frame.f_locals:
-                params['*' + varargs_name] = self._serialize_value(frame.f_locals[varargs_name])
+                params['*' + varargs_name] = safe_serialize(frame.f_locals[varargs_name])
                 
         if code.co_flags & 0x08: 
             kwargs_index = code.co_argcount
@@ -308,7 +262,7 @@ class ExecutionTracer:
                 kwargs_index += 1
             kwargs_name = code.co_varnames[kwargs_index]
             if kwargs_name in frame.f_locals:
-                params['**' + kwargs_name] = self._serialize_value(frame.f_locals[kwargs_name])
+                params['**' + kwargs_name] = safe_serialize(frame.f_locals[kwargs_name])
                 
         return params
     
@@ -359,7 +313,7 @@ class ExecutionTracer:
         # Update only local variables
         for var_name in local_var_names:
             if var_name in frame.f_locals:
-                current_func_vars[var_name] = self._serialize_value(frame.f_locals[var_name])
+                current_func_vars[var_name] = safe_serialize(frame.f_locals[var_name])
     
     def _get_current_seen_variables(self) -> Dict[str, Any]:
         """Get a copy of the current function's seen variables"""
@@ -574,7 +528,7 @@ class ExecutionTracer:
             _, vars_used = self._get_vars_defined_and_used(source_line)
             if frame in self._pending_line_events:
                 prev_event = self._pending_line_events.pop(frame)
-                prev_event['seen_variables'] = self._serialize_dict_values(dict(frame.f_locals))
+                prev_event['seen_variables'] = safe_serialize(frame.f_locals)
 
             if self.function_variables_stack:
                 self.function_variables_stack.pop()
@@ -587,7 +541,7 @@ class ExecutionTracer:
                 function_name=returning_func_name,
                 vars_used=vars_used,
                 caller_name=caller_name_after_return,
-                return_value=self._serialize_value(arg)
+                return_value=safe_serialize(arg)
             )
 
     def _handle_line_event(self, frame: FrameType) -> Optional[Callable]:
@@ -634,7 +588,7 @@ class ExecutionTracer:
         """Updates the previously recorded pending line event with the final state of local variables."""
         if frame in self._pending_line_events:
             prev_event = self._pending_line_events.pop(frame)
-            prev_event['seen_variables'] = self._serialize_dict_values(dict(frame.f_locals))
+            prev_event['seen_variables'] = safe_serialize(frame.f_locals)
 
     def _compute_line_metadata(self, frame: FrameType) -> Tuple[str, int, str, str, str, int]:
         """Gathers and computes metadata for the current line being executed, such as source and indentation."""
@@ -786,13 +740,8 @@ class ExecutionTracer:
             os.makedirs(base_dir, exist_ok=True)
         with open(self.output_file, 'w') as f:
             for entry in self.trace_data:
-                try:
-                    json_line = json.dumps(entry, ensure_ascii=False)
-                    f.write(json_line + '\n')
-                except TypeError:
-                    sanitized_entry = sanitize_for_json(entry)
-                    json_line = json.dumps(sanitized_entry, ensure_ascii=False)
-                    f.write(json_line + '\n')
+                json_line = safe_dump(entry)
+                f.write(json_line + '\n')
         print(f"Trace saved to {self.output_file}", file=sys.stderr, flush=True)
         
     def get_trace_summary(self):

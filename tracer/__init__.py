@@ -1,3 +1,3 @@
-from .tracer import ExecutionTracer, trace
+from .tracer import ExecutionTracer
 
-__all__ = ['ExecutionTracer', 'trace']
+__all__ = ['ExecutionTracer']
