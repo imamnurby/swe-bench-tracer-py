@@ -2,8 +2,12 @@
 name = "py-tracer"
 version = "0.1.0"
 dependencies = [
-    "pytest",
     "jsonpickle",
+]
+
+[project.optional-dependencies]
+all = [
+    "pytest",
     "pydantic",
     "numpy",
     "pandas",
@@ -17,4 +21,4 @@ build-backend = "setuptools.build_meta"
 include = ["tracer", "tracer_plugin"]
 
 [project.entry-points.pytest11]
-tracer_plugin = "tracer_plugin"
+tracer_plugin = "tracer_plugin.pytest_plugin"
