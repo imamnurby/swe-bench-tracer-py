@@ -1,7 +1,7 @@
 import sys
 import inspect
 import jsonpickle
-import orjson as json
+import json
 
 from jsonpickle.ext import numpy as jsonpickle_numpy
 from jsonpickle.ext import pandas as jsonpickle_pandas
@@ -46,10 +46,23 @@ def sanitize_for_json(value):
     except Exception:
         return jsonpickle_fallback(value)
 
+def sanitize_for_dict(value):
+    if isinstance(value, (list, tuple, set)):
+        return type(value)(sanitize_for_dict(v) for v in value)
+    if not isinstance(value, dict):
+        return value
+    result = {}
+    for k, v in value.items():
+        if not isinstance(k, (str, int, float, bool, type(None))):
+            k = str(k)
+        result[k] = sanitize_for_dict(v)
+    return result
+
 def safe_dump(obj):
-    return json.dumps(obj, default=sanitize_for_json).decode()
+    return json.dumps(obj, default=sanitize_for_json)
 
 def safe_serialize(obj):
+    obj = sanitize_for_dict(obj)
     return json.loads(json.dumps(obj, default=sanitize_for_json))
 
 def safe_deserialize(obj):
