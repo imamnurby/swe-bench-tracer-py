@@ -5,6 +5,7 @@ dependencies = [
     "pytest",
     "orjson",
     "jsonpickle",
+    "pydantic",
     "numpy",
     "pandas",
 ]
