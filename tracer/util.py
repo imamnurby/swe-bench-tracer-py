@@ -43,7 +43,9 @@ def get_func_qualname(frame: FrameType) -> str:
 def sanitize_for_json(value):
     def jsonpickle_fallback(obj):
         try:
-            return json.loads(jsonpickle.encode(obj))
+            return json.loads(
+                jsonpickle.encode(obj, unpicklable=False, make_refs=False)
+            )
         except Exception:
             return f'<non-serializable: {type(obj).__name__}>'
     try:
