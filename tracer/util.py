@@ -51,3 +51,6 @@ def safe_dump(obj):
 
 def safe_serialize(obj):
     return json.loads(json.dumps(obj, default=sanitize_for_json))
+
+def safe_deserialize(obj):
+    return jsonpickle.decode(json.dumps(obj))
