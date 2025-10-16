@@ -1,4 +1,4 @@
-from .plugin import (
+from .pytest_plugin import (
     pytest_addoption,
     pytest_configure,
     pytest_unconfigure,
