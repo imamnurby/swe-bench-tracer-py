@@ -3,13 +3,19 @@ import inspect
 import jsonpickle
 import json
 
-from jsonpickle.ext import numpy as jsonpickle_numpy
-from jsonpickle.ext import pandas as jsonpickle_pandas
-
 from types import CodeType, FrameType, GenericAlias
 
-jsonpickle_numpy.register_handlers()
-jsonpickle_pandas.register_handlers()
+try:
+    from jsonpickle.ext import numpy as jsonpickle_numpy
+    jsonpickle_numpy.register_handlers()
+except ImportError:
+    pass
+
+try:
+    from jsonpickle.ext import pandas as jsonpickle_pandas
+    jsonpickle_pandas.register_handlers()
+except ImportError:
+    pass
 
 def get_func_qualname(frame: FrameType) -> str:
     if sys.version_info >= (3, 11):
@@ -47,8 +53,10 @@ def sanitize_for_json(value):
         return jsonpickle_fallback(value)
 
 def sanitize_for_dict(value):
-    if isinstance(value, (list, tuple, set)):
-        return type(value)(sanitize_for_dict(v) for v in value)
+    if isinstance(value, list):
+        return [sanitize_for_dict(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(sanitize_for_dict(v) for v in value)
     if not isinstance(value, dict):
         return value
     result = {}
