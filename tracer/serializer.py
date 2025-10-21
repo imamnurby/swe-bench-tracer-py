@@ -47,6 +47,8 @@ EXT_PICKLER = jsonpickle.Pickler(
     fail_safe=lambda obj: f'<non-serializable: {type(obj).__name__}>'
 )
 
+UNPICKLER = jsonpickle.Unpickler()
+
 @jsonpickle.handlers.register(type(iter([])))
 class IteratorHandler(BaseHandler):
     def flatten(self, obj, data):
@@ -99,4 +101,4 @@ def dump(x):
     return json.dumps(serialize(x))
 
 def deserialize(x):
-    return jsonpickle.decode(json.dumps(x))
+    return UNPICKLER.restore(x)
