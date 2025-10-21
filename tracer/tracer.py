@@ -10,7 +10,8 @@ from collections import defaultdict
 from typing import Any, Dict, List, Tuple, Optional, Match, Callable
 from types import FrameType
 from pathlib import Path
-from tracer.util import get_func_qualname, safe_serialize, safe_dump
+from tracer.util import get_func_qualname
+from tracer.serializer import serialize, dump
 
 class ExecutionTracer:
     def __init__(self, output_file: str = "trace.jsonl"):
@@ -124,9 +125,9 @@ class ExecutionTracer:
         # Check for built-in modules
         if filename.startswith('<frozen'):
             return True
-    
-        # Exclude tracer's pytest plugin module
-        if 'tracer_pytest' in filename:
+
+        # Exclude tracer's plugin module
+        if 'tracer_plugin' in filename:
             return True
         
         # Normalize the path
@@ -248,13 +249,13 @@ class ExecutionTracer:
         
         for name in param_names:
             if name in frame.f_locals:
-                params[name] = safe_serialize(frame.f_locals[name])
+                params[name] = serialize(frame.f_locals[name])
         
         # Handle *args and **kwargs
         if code.co_flags & 0x04: 
             varargs_name = code.co_varnames[code.co_argcount]
             if varargs_name in frame.f_locals:
-                params['*' + varargs_name] = safe_serialize(frame.f_locals[varargs_name])
+                params['*' + varargs_name] = serialize(frame.f_locals[varargs_name])
                 
         if code.co_flags & 0x08: 
             kwargs_index = code.co_argcount
@@ -262,7 +263,7 @@ class ExecutionTracer:
                 kwargs_index += 1
             kwargs_name = code.co_varnames[kwargs_index]
             if kwargs_name in frame.f_locals:
-                params['**' + kwargs_name] = safe_serialize(frame.f_locals[kwargs_name])
+                params['**' + kwargs_name] = serialize(frame.f_locals[kwargs_name])
                 
         return params
     
@@ -313,7 +314,7 @@ class ExecutionTracer:
         # Update only local variables
         for var_name in local_var_names:
             if var_name in frame.f_locals:
-                current_func_vars[var_name] = safe_serialize(frame.f_locals[var_name])
+                current_func_vars[var_name] = serialize(frame.f_locals[var_name])
     
     def _get_current_seen_variables(self) -> Dict[str, Any]:
         """Get a copy of the current function's seen variables"""
@@ -528,7 +529,7 @@ class ExecutionTracer:
             _, vars_used = self._get_vars_defined_and_used(source_line)
             if frame in self._pending_line_events:
                 prev_event = self._pending_line_events.pop(frame)
-                prev_event['seen_variables'] = safe_serialize(frame.f_locals)
+                prev_event['seen_variables'] = serialize(frame.f_locals)
 
             if self.function_variables_stack:
                 self.function_variables_stack.pop()
@@ -541,7 +542,7 @@ class ExecutionTracer:
                 function_name=returning_func_name,
                 vars_used=vars_used,
                 caller_name=caller_name_after_return,
-                return_value=safe_serialize(arg)
+                return_value=serialize(arg)
             )
 
     def _handle_line_event(self, frame: FrameType) -> Optional[Callable]:
@@ -588,7 +589,7 @@ class ExecutionTracer:
         """Updates the previously recorded pending line event with the final state of local variables."""
         if frame in self._pending_line_events:
             prev_event = self._pending_line_events.pop(frame)
-            prev_event['seen_variables'] = safe_serialize(frame.f_locals)
+            prev_event['seen_variables'] = serialize(frame.f_locals)
 
     def _compute_line_metadata(self, frame: FrameType) -> Tuple[str, int, str, str, str, int]:
         """Gathers and computes metadata for the current line being executed, such as source and indentation."""
@@ -740,7 +741,7 @@ class ExecutionTracer:
             os.makedirs(base_dir, exist_ok=True)
         with open(self.output_file, 'w') as f:
             for entry in self.trace_data:
-                json_line = safe_dump(entry)
+                json_line = dump(entry)
                 f.write(json_line + '\n')
         print(f"Trace saved to {self.output_file}", file=sys.stderr, flush=True)
         

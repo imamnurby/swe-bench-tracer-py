@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
-from tracer.util import safe_deserialize
+from tracer.serializer import deserialize
 
 class Event(BaseModel):
     event_id: int
@@ -16,17 +16,17 @@ class Event(BaseModel):
         event_type = data['event_type']
         if event_type == 'Function':
             event = FunctionEvent(**data)
-            event.parameters = {k: safe_deserialize(v) for k, v in event.parameters.items()}
+            event.parameters = {k: deserialize(v) for k, v in event.parameters.items()}
             return event
         elif event_type == 'Return':
             event = ReturnEvent(**data)
-            event.return_value = safe_deserialize(event.return_value)
+            event.return_value = deserialize(event.return_value)
             return event
         elif event_type == 'Exception':
             return ExceptionEvent(**data)
         elif event_type == 'Line':
             event = LineEvent(**data)
-            event.seen_variables = {k: safe_deserialize(v) for k, v in event.seen_variables.items()}
+            event.seen_variables = {k: deserialize(v) for k, v in event.seen_variables.items()}
             return event
         else:
             raise ValueError(f"Unknown event type: {event_type}")
