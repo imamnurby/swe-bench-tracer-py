@@ -1,7 +1,18 @@
 import sys
 import inspect
 
-from types import CodeType, FrameType, GenericAlias
+from types import CodeType, FrameType
+
+def get_members_static(obj, predicate=None):
+    out = []
+    for name in dir(obj):
+        try:
+            attr = inspect.getattr_static(obj, name)
+        except Exception:
+            continue
+        if predicate is None or predicate(attr):
+            out.append((name, attr))
+    return out
 
 def get_func_qualname(frame: FrameType) -> str:
     if sys.version_info >= (3, 11):
@@ -13,9 +24,13 @@ def get_func_qualname(frame: FrameType) -> str:
         # function is a method in a class in the module
         if inspect.isclass(val):
             # check all methods of the class
-            if isinstance(val, GenericAlias):
-                val = val.__origin__
-            for _, method in inspect.getmembers(val, predicate=lambda x: inspect.isfunction(x) or inspect.ismethod(x)):
+            try:
+                from types import GenericAlias
+                if isinstance(val, GenericAlias):
+                    val = val.__origin__
+            except ImportError:
+                pass
+            for _, method in get_members_static(val, predicate=lambda x: inspect.isfunction(x) or inspect.ismethod(x)):
                 if hasattr(method, '__code__') and method.__code__ is frame.f_code:
                     return method.__qualname__
     # function is a nested function; we only support one level of nesting for now
