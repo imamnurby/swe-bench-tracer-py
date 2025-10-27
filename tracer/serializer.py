@@ -4,7 +4,8 @@ import types
 import inspect
 import jsonpickle
 
-from collections.abc import Mapping, Sequence
+from decimal import Decimal
+from collections.abc import Mapping, Sequence, Set
 from jsonpickle.handlers import BaseHandler
 
 REGISTERED_EXT_TYPES = []
@@ -72,6 +73,9 @@ def serialize(x):
     if isinstance(x, PRIMITIVES):
         return x
     
+    if isinstance(x, Decimal):
+        return float(x)
+    
     if isinstance(x, tuple(REGISTERED_EXT_TYPES)):
         return EXT_PICKLER.flatten(x)
     
@@ -81,7 +85,7 @@ def serialize(x):
             out[str(k)] = serialize(v)
         return out
     
-    if isinstance(x, (list, tuple, set, frozenset)):
+    if isinstance(x, (Sequence, Set)):
         out = []
         for v in list(x):
             out.append(serialize(v))
