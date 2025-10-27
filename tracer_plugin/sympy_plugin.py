@@ -28,7 +28,7 @@ def _profile(frame, event, arg):
             if tid:
                 _state.active = True
                 _state.tid = tid
-                _state.tracer = ExecutionTracer(os.path.join(os.environ.get('TRACER_OUTPUT_DIR'), f"{tid}.jsonl"))
+                _state.tracer = ExecutionTracer(os.path.join(os.environ.get('TRACER_OUTPUT_DIR'), "{}.jsonl".format(tid)))
                 st.append("root")
                 _state.tracer.start_tracing()
                 return
@@ -42,7 +42,7 @@ def _profile(frame, event, arg):
             try:
                 _state.tracer.save_trace()
             except Exception as e:
-                print(f"Failed to save trace to {_state.tracer.output_file}: {e}", file=sys.stderr, flush=True)
+                print("Failed to save trace to {}: {}".format(_state.tracer.output_file, e), file=sys.stderr, flush=True)
             _state.active = False
             _state.tid = None
             _state.tracer = None

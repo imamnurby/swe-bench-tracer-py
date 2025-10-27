@@ -26,6 +26,6 @@ def pytest_runtest_call(item):
         yield
         return
     test_name = item.nodeid
-    output_file = os.path.join(cfg._tracer_output_dir, f"{test_name}.jsonl")
+    output_file = os.path.join(cfg._tracer_output_dir, "{}.jsonl".format(test_name))
     with ExecutionTracer(output_file):
         yield    
