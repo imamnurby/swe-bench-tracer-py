@@ -73,7 +73,7 @@ class ExecutionTracer:
         try:
             self.save_trace()
         except Exception as e:
-            print(f"Failed to save trace to {self.output_file}: {e}", file=sys.stderr, flush=True)
+            print("Failed to save trace to {}: {}".format(self.output_file, e), file=sys.stderr, flush=True)
         return False
     
     def _get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
@@ -293,7 +293,7 @@ class ExecutionTracer:
                     mod_name = Path(filename).stem
         
         return {
-            'qualified_name': f'{mod_name}:{func_qualname}',
+            'qualified_name': '{}:{}'.format(mod_name, func_qualname),
             'filename': filename,
             'func_name': func_name,
             'mod_name': mod_name,
@@ -743,7 +743,7 @@ class ExecutionTracer:
             for entry in self.trace_data:
                 json_line = dump(entry)
                 f.write(json_line + '\n')
-        print(f"Trace saved to {self.output_file}", file=sys.stderr, flush=True)
+        print("Trace saved to {}".format(self.output_file), file=sys.stderr, flush=True)
         
     def get_trace_summary(self):
         """Get a summary of the collected trace"""

@@ -38,5 +38,5 @@ def get_func_qualname(frame: FrameType) -> str:
         if inspect.isfunction(val):
             for const in val.__code__.co_consts:
                 if isinstance(const, CodeType) and const is frame.f_code:
-                    return f"{val.__qualname__}.<locals>.{frame.f_code.co_name}"
+                    return "{}.<locals>.{}".format(val.__qualname__, frame.f_code.co_name)
     return frame.f_code.co_name

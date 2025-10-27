@@ -40,12 +40,12 @@ PICKLER = jsonpickle.Pickler(
     make_refs=False,
     max_depth=1,
     warn=True,
-    fail_safe=lambda obj: f'<non-serializable: {type(obj).__name__}>'
+    fail_safe=lambda obj: '<non-serializable: {}>'.format(type(obj).__name__)
 )
 
 EXT_PICKLER = jsonpickle.Pickler(
     warn=True,
-    fail_safe=lambda obj: f'<non-serializable: {type(obj).__name__}>'
+    fail_safe=lambda obj: '<non-serializable: {}>'.format(type(obj).__name__)
 )
 
 UNPICKLER = jsonpickle.Unpickler()
@@ -97,7 +97,7 @@ def serialize(x):
         isinstance(x, (types.GeneratorType, types.ModuleType, io.IOBase)),
         hasattr(x, '__iter__') and not isinstance(x, (str, bytes, bytearray, Mapping, Sequence)),
     ]):
-        return f"<{type(x).__name__}>"
+        return "<{}>".format(type(x).__name__)
 
     return PICKLER.flatten(x)
 
