@@ -16,20 +16,20 @@ class Event(BaseModel):
         event_type = data['event_type']
         if event_type == 'Function':
             event = FunctionEvent(**data)
-            # event.parameters = {k: deserialize(v) for k, v in event.parameters.items()}
             return event
         elif event_type == 'Return':
             event = ReturnEvent(**data)
-            # event.return_value = deserialize(event.return_value)
             return event
         elif event_type == 'Exception':
             return ExceptionEvent(**data)
         elif event_type == 'Line':
             event = LineEvent(**data)
-            # event.seen_variables = {k: deserialize(v) for k, v in event.seen_variables.items()}
             return event
         else:
             raise ValueError(f"Unknown event type: {event_type}")
+
+    def deserialized(self):
+        return self
 
 class FunctionEvent(Event):
     caller_name: str
@@ -37,10 +37,18 @@ class FunctionEvent(Event):
     parameter_sources: Dict
     inherited_control_dependencies: List[int]
 
+    def deserialized(self):
+        self.parameters = {k: deserialize(v) for k, v in self.parameters.items()}
+        return self
+
 class ReturnEvent(Event):
     vars_used: List[str]
     caller_name: str
     return_value: Any
+    
+    def deserialized(self):
+        self.return_value = deserialize(self.return_value)
+        return self
 
 class ExceptionEvent(Event):
     exception_type: str
@@ -53,3 +61,7 @@ class LineEvent(Event):
     control_dependencies: List[int]
     inherited_control_dependencies: List[int]
     seen_variables: Dict[str, Any]
+
+    def deserialized(self):
+        self.seen_variables = {k: deserialize(v) for k, v in self.seen_variables.items()}
+        return self
