@@ -8,6 +8,27 @@ from decimal import Decimal
 from collections.abc import Mapping, Sequence, Set
 from jsonpickle.handlers import BaseHandler
 
+def registry_get_monkey_patch(self):
+    '''
+    - Base handler is registered for type A
+    - An instance of type B (subclass of A) is requested
+    - Only return the base handler if A and B are defined in the same module
+    '''
+    def is_same_module(cls_or_name: type, cls: type):
+        return cls_or_name.__module__ == cls.__module__
+    
+    def get(cls_or_name, default=None):
+        handler = self._handlers.get(cls_or_name)
+        # attempt to find a base class
+        if handler is None and jsonpickle.util.is_type(cls_or_name):
+            for cls, base_handler in self._base_handlers.items():
+                if issubclass(cls_or_name, cls) and is_same_module(cls_or_name, cls):
+                    return base_handler
+        return default if handler is None else handler
+    return get
+
+jsonpickle.handlers.get = registry_get_monkey_patch(jsonpickle.handlers.registry)
+
 REGISTERED_EXT_TYPES = []
 
 try:
@@ -34,12 +55,7 @@ except ImportError:
     pass
 
 PRIMITIVES = (type(None), bool, int, float, str)
-
-PICKLER = jsonpickle.Pickler(
-    warn=True,
-    fail_safe=lambda obj: '<{}>'.format(type(obj).__name__)
-)
-
+PICKLER = jsonpickle.Pickler(warn=True)
 UNPICKLER = jsonpickle.Unpickler()
 
 @jsonpickle.handlers.register(type(iter([])))
@@ -90,11 +106,17 @@ def serialize(x):
         hasattr(x, '__iter__') and not isinstance(x, (str, bytes, bytearray, Mapping, Sequence)),
     ]):
         return "<{}>".format(type(x).__name__)
-
-    return PICKLER.flatten(x)
+    
+    try:
+        return PICKLER.flatten(x)
+    except Exception:
+        return "<{}>".format(type(x).__name__)
 
 def dump(x):
     return json.dumps(serialize(x))
 
 def deserialize(x):
-    return UNPICKLER.restore(x)
+    try:
+        return UNPICKLER.restore(x)
+    except Exception:
+        return x
