@@ -36,16 +36,8 @@ except ImportError:
 PRIMITIVES = (type(None), bool, int, float, str)
 
 PICKLER = jsonpickle.Pickler(
-    unpicklable=False,
-    make_refs=False,
-    max_depth=1,
     warn=True,
-    fail_safe=lambda obj: '<non-serializable: {}>'.format(type(obj).__name__)
-)
-
-EXT_PICKLER = jsonpickle.Pickler(
-    warn=True,
-    fail_safe=lambda obj: '<non-serializable: {}>'.format(type(obj).__name__)
+    fail_safe=lambda obj: '<{}>'.format(type(obj).__name__)
 )
 
 UNPICKLER = jsonpickle.Unpickler()
@@ -77,7 +69,7 @@ def serialize(x):
         return float(x)
     
     if isinstance(x, tuple(REGISTERED_EXT_TYPES)):
-        return EXT_PICKLER.flatten(x)
+        return PICKLER.flatten(x)
     
     if isinstance(x, Mapping):
         out = {}
