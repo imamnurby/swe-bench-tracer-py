@@ -54,6 +54,33 @@ def test_uninitialized_sequence():
     expected_output = "<Unserializable Sequence object>"
     assert_equals(serialized, expected_output)
 
+def test_partially_initialized_numpy_array():
+    """
+    Tests that the serializer can handle a partially-initialized object
+    that is a subclass of a registered type (like numpy.ndarray).
+    This is from astropy-13033.
+    """
+    class UninitializedArray(np.ndarray):
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+            self._name = "initialized"
+
+        @property
+        def name(self):
+            return self._name
+        
+        # jsonpickle calls __reduce__ during serialization
+        def __reduce__(self):
+            return (self.__class__, (self.name,))
+
+    base_array = np.array([1, 2, 3])
+
+    # This creates an UninitializedArray instance.
+    # `_name` is NOT set on this new instance.
+    uninitialized_view = base_array.view(UninitializedArray)
+    serialized = serialize(uninitialized_view)    
+    assert_equals(serialized, "<UninitializedArray>")
+
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
     for test_func in test_funcs:
