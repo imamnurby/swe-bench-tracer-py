@@ -81,6 +81,13 @@ def test_partially_initialized_numpy_array():
     serialized = serialize(uninitialized_view)    
     assert_equals(serialized, "<UninitializedArray>")
 
+def test_custom_handlers():
+    import sys, socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.close()
+    assert_equals(serialize(sock), {"socket.socket": {"fd": sock.fileno(), "family": sock.family, "type": sock.type, "proto": sock.proto}})
+    assert_equals(serialize(sys.stdout), {"io.TextIOWrapper": {"name": sys.stdout.name, "mode": sys.stdout.mode, "encoding": sys.stdout.encoding}})
+
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
     for test_func in test_funcs:
