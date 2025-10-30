@@ -51,7 +51,7 @@ def test_uninitialized_sequence():
 
     uninitialized_obj = UninitializedSequence.__new__(UninitializedSequence)
     serialized = serialize(uninitialized_obj)    
-    expected_output = "<Unserializable Sequence object>"
+    expected_output = "<UninitializedSequence>"
     assert_equals(serialized, expected_output)
 
 def test_partially_initialized_numpy_array():

@@ -77,6 +77,9 @@ class FileHandler(BaseHandler):
             name = None
         return {"__file__": True, "name": name, "closed": obj.closed}
 
+def non_serializable(obj):
+    return "<{}>".format(type(obj).__name__)
+
 def serialize(x):
     if isinstance(x, PRIMITIVES):
         return x
@@ -88,7 +91,7 @@ def serialize(x):
         try:
             return PICKLER.flatten(x)
         except AttributeError:
-            return "<{}>".format(type(x).__name__)
+            return non_serializable(x)
     
     if isinstance(x, Mapping):
         out = {}
@@ -103,7 +106,7 @@ def serialize(x):
                 out.append(serialize(v))
             return out if not isinstance(x, tuple) else tuple(out)
         except AttributeError:
-            return "<Unserializable Sequence object>"
+            return non_serializable(x)
     
     if any([
         inspect.isfunction(x), inspect.ismethod(x), inspect.isclass(x),
@@ -111,12 +114,12 @@ def serialize(x):
         isinstance(x, (types.GeneratorType, types.ModuleType, io.IOBase)),
         hasattr(x, '__iter__') and not isinstance(x, (str, bytes, bytearray, Mapping, Sequence)),
     ]):
-        return "<{}>".format(type(x).__name__)
+        return non_serializable(x)
     
     try:
         return PICKLER.flatten(x)
     except Exception:
-        return "<{}>".format(type(x).__name__)
+        return non_serializable(x)
 
 def dump(x):
     return json.dumps(serialize(x))
