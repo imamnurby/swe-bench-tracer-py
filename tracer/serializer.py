@@ -94,10 +94,13 @@ def serialize(x):
         return out
     
     if isinstance(x, (Sequence, Set)):
-        out = []
-        for v in list(x):
-            out.append(serialize(v))
-        return out if not isinstance(x, tuple) else tuple(out)
+        try:
+            out = []
+            for v in list(x):
+                out.append(serialize(v))
+            return out if not isinstance(x, tuple) else tuple(out)
+        except AttributeError:
+            return "<Unserializable Sequence object>"
     
     if any([
         inspect.isfunction(x), inspect.ismethod(x), inspect.isclass(x),

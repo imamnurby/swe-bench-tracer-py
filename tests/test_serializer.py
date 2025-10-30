@@ -1,6 +1,7 @@
 import traceback
 import numpy as np
 
+from collections.abc import Sequence
 from tracer.serializer import serialize, deserialize
 
 def assert_equals(obj, expected):
@@ -34,6 +35,24 @@ def test_subclass_of_registered_type():
     serialized = serialize(obj)
     
     assert_equals(serialized, {'py/reduce': [{'py/function': 'numpy._core.multiarray._reconstruct'}, {'py/tuple': [{'py/type': '__main__.test_subclass_of_registered_type.<locals>.MyArray'}, {'py/tuple': [0]}, {'py/b64': 'Yg=='}]}, {'py/tuple': [1, {'py/tuple': [3]}, {'py/reduce': [{'py/type': 'numpy.dtype'}, {'py/tuple': ['i8', False, True]}, {'py/tuple': [3, '<', None, None, None, -1, -1, 0]}]}, False, {'py/b64': 'AQAAAAAAAAACAAAAAAAAAAMAAAAAAAAA'}]}]})
+
+def test_uninitialized_sequence():
+    """
+    Tests that the serializer can gracefully handle an uninitialized
+    sequence-like object without raising an AttributeError.
+    """
+    class UninitializedSequence(Sequence):
+        def __init__(self, data):
+            self._data = list(data)
+        def __len__(self):
+            return len(self._data)
+        def __getitem__(self, index):
+            return self._data[index]
+
+    uninitialized_obj = UninitializedSequence.__new__(UninitializedSequence)
+    serialized = serialize(uninitialized_obj)    
+    expected_output = "<Unserializable Sequence object>"
+    assert_equals(serialized, expected_output)
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
