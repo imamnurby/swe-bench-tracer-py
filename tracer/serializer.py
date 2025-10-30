@@ -123,7 +123,7 @@ def serialize(x):
         inspect.isfunction(x), inspect.ismethod(x), inspect.isclass(x),
         inspect.isframe(x), inspect.iscode(x), inspect.istraceback(x),
         isinstance(x, types.ModuleType),
-        hasattr(x, '__iter__') and not isinstance(x, (str, bytes, bytearray, Mapping, Sequence)),
+        hasattr(x, '__iter__') and not isinstance(x, (bytes, bytearray, io.IOBase)),
     ]):
         return non_serializable(x)
     
