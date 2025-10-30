@@ -1,6 +1,7 @@
 import io
 import json
 import types
+import socket
 import inspect
 import jsonpickle
 
@@ -70,12 +71,22 @@ class GeneratorHandler(BaseHandler):
 
 @jsonpickle.handlers.register(io.IOBase)
 class FileHandler(BaseHandler):
-    def flatten(self, obj, data):
+    def flatten(self, obj: io.IOBase, data):
         try:
             name = obj.name
         except Exception:
             name = None
-        return {"__file__": True, "name": name, "closed": obj.closed}
+        return {"io.IOBase": {"name": name, "closed": obj.closed}}
+
+@jsonpickle.handlers.register(io.TextIOWrapper)
+class TextIOHandler(BaseHandler):
+    def flatten(self, obj: io.TextIOWrapper, data):
+        return {"io.TextIOWrapper": {"name": obj.name, "mode": obj.mode, "encoding": obj.encoding}}
+
+@jsonpickle.handlers.register(socket.socket)
+class SocketHandler(BaseHandler):
+    def flatten(self, obj: socket.socket, data):
+        return {"socket.socket": {"fd": obj.fileno(), "family": obj.family, "type": obj.type, "proto": obj.proto}}
 
 def non_serializable(obj):
     return "<{}>".format(type(obj).__name__)
@@ -111,7 +122,7 @@ def serialize(x):
     if any([
         inspect.isfunction(x), inspect.ismethod(x), inspect.isclass(x),
         inspect.isframe(x), inspect.iscode(x), inspect.istraceback(x),
-        isinstance(x, (types.GeneratorType, types.ModuleType, io.IOBase)),
+        isinstance(x, types.ModuleType),
         hasattr(x, '__iter__') and not isinstance(x, (str, bytes, bytearray, Mapping, Sequence)),
     ]):
         return non_serializable(x)
