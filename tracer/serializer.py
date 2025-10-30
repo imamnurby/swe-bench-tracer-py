@@ -88,6 +88,13 @@ class SocketHandler(BaseHandler):
     def flatten(self, obj: socket.socket, data):
         return {"socket.socket": {"fd": obj.fileno(), "family": obj.family, "type": obj.type, "proto": obj.proto}}
 
+def safe_hasattr(obj, attr):
+    try:
+        inspect.getattr_static(obj, attr)
+        return True
+    except AttributeError:
+        return False
+
 def non_serializable(obj):
     return "<{}>".format(type(obj).__name__)
 
@@ -120,10 +127,8 @@ def serialize(x):
             return non_serializable(x)
     
     if any([
-        inspect.isfunction(x), inspect.ismethod(x), inspect.isclass(x),
         inspect.isframe(x), inspect.iscode(x), inspect.istraceback(x),
-        isinstance(x, types.ModuleType),
-        hasattr(x, '__iter__') and not isinstance(x, (bytes, bytearray, io.IOBase)),
+        safe_hasattr(x, '__iter__') and not isinstance(x, (bytes, bytearray, io.IOBase)),
     ]):
         return non_serializable(x)
     
