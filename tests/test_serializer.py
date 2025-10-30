@@ -7,6 +7,21 @@ from tracer.serializer import serialize, deserialize
 def assert_equals(obj, expected):
     assert obj == expected, f"Provided: {obj}\nExpected: {expected}"
 
+def test_func_types():
+    def dummy_func(): ...
+    class A: 
+        def a(self): ...
+    assert_equals(serialize(dummy_func), {'py/function': '__main__.test_func_types.<locals>.dummy_func'})
+    assert_equals(serialize(A.a), {'py/function': '__main__.test_func_types.<locals>.A.a'})
+    assert_equals(serialize(A().a), {'py/object': 'builtins.method'})
+    assert_equals(serialize(len), {'py/function': 'builtins.len'})
+
+def test_module_type():
+    import math, sys
+    assert_equals(serialize(math), {'py/mod': 'math/math'})
+    assert_equals(serialize(sys.modules[__name__]), {'py/mod': '__main__/__main__'})
+
+
 def test_dict_of_funcs_in_class():
     def dummy_func():
         pass
