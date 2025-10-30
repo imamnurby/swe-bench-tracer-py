@@ -85,7 +85,10 @@ def serialize(x):
         return float(x)
     
     if isinstance(x, tuple(REGISTERED_EXT_TYPES)):
-        return PICKLER.flatten(x)
+        try:
+            return PICKLER.flatten(x)
+        except AttributeError:
+            return "<{}>".format(type(x).__name__)
     
     if isinstance(x, Mapping):
         out = {}
