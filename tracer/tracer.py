@@ -244,10 +244,13 @@ class ExecutionTracer:
     def _get_function_parameters(self, frame: FrameType) -> Dict[str, Any]:
         """Extract function parameters and their values"""
         code = frame.f_code
+        func_name = code.co_name
         param_names = code.co_varnames[:code.co_argcount]
         params = {}
         
         for name in param_names:
+            if func_name == '__init__' and name == 'self':
+                continue
             if name in frame.f_locals:
                 params[name] = serialize(frame.f_locals[name])
         
