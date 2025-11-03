@@ -21,7 +21,6 @@ def test_module_type():
     assert_equals(serialize(math), {'py/mod': 'math/math'})
     assert_equals(serialize(sys.modules[__name__]), {'py/mod': '__main__/__main__'})
 
-
 def test_dict_of_funcs_in_class():
     def dummy_func():
         pass
@@ -102,6 +101,14 @@ def test_custom_handlers():
     sock.close()
     assert_equals(serialize(sock), {"socket.socket": {"fd": sock.fileno(), "family": sock.family, "type": sock.type, "proto": sock.proto}})
     assert_equals(serialize(sys.stdout), {"io.TextIOWrapper": {"name": sys.stdout.name, "mode": sys.stdout.mode, "encoding": sys.stdout.encoding}})
+
+def test_decimal():
+    from decimal import Decimal
+    assert_equals(serialize(Decimal('10.5')), {'decimal.Decimal': '10.5'})
+    assert_equals(serialize(Decimal('sNaN')), {'decimal.Decimal': 'sNaN'})
+    assert_equals(serialize(Decimal('NaN')), {'decimal.Decimal': 'NaN'})
+    assert_equals(serialize(Decimal('Inf')), {'decimal.Decimal': 'Infinity'})
+    assert_equals(serialize(Decimal('-Inf')), {'decimal.Decimal': '-Infinity'})    
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]

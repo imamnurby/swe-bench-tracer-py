@@ -2,10 +2,10 @@ import io
 import json
 import types
 import socket
+import decimal
 import inspect
 import jsonpickle
 
-from decimal import Decimal
 from collections.abc import Mapping, Sequence, Set
 from jsonpickle.handlers import BaseHandler
 
@@ -88,6 +88,11 @@ class SocketHandler(BaseHandler):
     def flatten(self, obj: socket.socket, data):
         return {"socket.socket": {"fd": obj.fileno(), "family": obj.family, "type": obj.type, "proto": obj.proto}}
 
+@jsonpickle.handlers.register(decimal.Decimal)
+class DecimalHandler(BaseHandler):
+    def flatten(self, obj: decimal.Decimal, data):
+        return {"decimal.Decimal": str(obj)}
+
 def safe_hasattr(obj, attr):
     try:
         inspect.getattr_static(obj, attr)
@@ -101,9 +106,6 @@ def non_serializable(obj):
 def serialize(x):
     if isinstance(x, PRIMITIVES):
         return x
-    
-    if isinstance(x, Decimal):
-        return float(x)
     
     if isinstance(x, tuple(REGISTERED_EXT_TYPES)):
         try:
