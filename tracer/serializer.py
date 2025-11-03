@@ -91,7 +91,10 @@ class SocketHandler(BaseHandler):
 @jsonpickle.handlers.register(decimal.Decimal)
 class DecimalHandler(BaseHandler):
     def flatten(self, obj: decimal.Decimal, data):
-        return {"decimal.Decimal": str(obj)}
+        return {"py/object": "decimal.Decimal", "value": str(obj)}
+    
+    def restore(self, obj):
+        return decimal.Decimal(obj["value"])
 
 def safe_hasattr(obj, attr):
     try:

@@ -104,11 +104,15 @@ def test_custom_handlers():
 
 def test_decimal():
     from decimal import Decimal
-    assert_equals(serialize(Decimal('10.5')), {'decimal.Decimal': '10.5'})
-    assert_equals(serialize(Decimal('sNaN')), {'decimal.Decimal': 'sNaN'})
-    assert_equals(serialize(Decimal('NaN')), {'decimal.Decimal': 'NaN'})
-    assert_equals(serialize(Decimal('Inf')), {'decimal.Decimal': 'Infinity'})
-    assert_equals(serialize(Decimal('-Inf')), {'decimal.Decimal': '-Infinity'})    
+    assert_equals(serialize(Decimal('10.5')), {'py/object': 'decimal.Decimal', 'value': '10.5'})
+    assert_equals(serialize(Decimal('sNaN')), {'py/object': 'decimal.Decimal', 'value': 'sNaN'})
+    assert_equals(serialize(Decimal('NaN')), {'py/object': 'decimal.Decimal', 'value': 'NaN'})
+    assert_equals(serialize(Decimal('Inf')), {'py/object': 'decimal.Decimal', 'value': 'Infinity'})
+    assert_equals(serialize(Decimal('-Inf')), {'py/object': 'decimal.Decimal', 'value': '-Infinity'})
+    
+def test_handlers_deserialize():
+    from decimal import Decimal
+    assert_equals(deserialize(serialize(Decimal('10.5'))), Decimal('10.5'))
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
