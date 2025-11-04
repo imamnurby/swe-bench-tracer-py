@@ -114,17 +114,40 @@ def test_handlers_deserialize():
     from decimal import Decimal
     assert_equals(deserialize(serialize(Decimal('10.5'))), Decimal('10.5'))
 
-def test_function_with_docstring():
-    def func_with_doc():
-        """This is a docstring."""
-        pass
-    class A:
+def test_property_doc_handler():
+    class Base:
         @property
-        def prop1(self):
-            """Property docstring."""
-            return 42
-    assert_equals(serialize(func_with_doc), {'py/function': '__main__.test_function_with_docstring.<locals>.func_with_doc', '__doc__': 'This is a docstring.'})
-    assert_equals(serialize(A.prop1), {'py/function': '__main__.test_function_with_docstring.<locals>.A.prop1', '__doc__': 'Property docstring.'})
+        def bar(self):
+            """base bar doc"""
+            return 1
+
+    class Sub(Base):
+        @property
+        def bar(self):
+            return 2
+
+    val = Sub.__dict__['bar']            # property with __doc__ = None
+    super_method = getattr(Base, 'bar')  # property with a docstring
+
+    assert val.__doc__ is None
+    assert isinstance(super_method.__doc__, str) and "base bar doc" in super_method.__doc__
+
+    ser_val_before = serialize(val)
+    ser_super_before = serialize(super_method)
+
+    assert ser_val_before == {
+        "py/object": "builtins.property",
+        "value": {"__doc__": None},
+    }
+    assert ser_super_before.get("py/object") == "builtins.property"
+    assert isinstance(ser_super_before["value"]["__doc__"], str)
+    assert "base bar doc" in ser_super_before["value"]["__doc__"]
+
+    val.__doc__ = super_method.__doc__
+
+    ser_val_after = serialize(val)
+    assert ser_val_after.get("py/object") == "builtins.property"
+    assert ser_val_after["value"]["__doc__"] == super_method.__doc__
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]

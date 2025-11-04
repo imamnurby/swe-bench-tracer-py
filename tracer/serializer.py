@@ -120,7 +120,11 @@ class DecimalHandler(BaseHandler):
 @jsonpickle.handlers.register(property)
 class PropertyHandler(BaseHandler):
     def flatten(self, obj: property, data):
-        return PICKLER.flatten(obj.fget)
+        try: 
+            doc = obj.__doc__ 
+            return {"py/object": "builtins.property", "value": {"__doc__": doc}} 
+        except Exception: 
+            return {"py/object": "builtins.property"}
 
 def safe_hasattr(obj, attr):
     try:
