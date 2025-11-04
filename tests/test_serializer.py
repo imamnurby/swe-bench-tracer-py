@@ -48,7 +48,7 @@ def test_subclass_of_registered_type():
     obj = np.array([1, 2, 3]).view(MyArray)
     serialized = serialize(obj)
     
-    assert_equals(serialized, {'py/reduce': [{'py/function': 'numpy._core.multiarray._reconstruct'}, {'py/tuple': [{'py/type': '__main__.test_subclass_of_registered_type.<locals>.MyArray'}, {'py/tuple': [0]}, {'py/b64': 'Yg=='}]}, {'py/tuple': [1, {'py/tuple': [3]}, {'py/reduce': [{'py/type': 'numpy.dtype'}, {'py/tuple': ['i8', False, True]}, {'py/tuple': [3, '<', None, None, None, -1, -1, 0]}]}, False, {'py/b64': 'AQAAAAAAAAACAAAAAAAAAAMAAAAAAAAA'}]}]})
+    assert_equals(serialized, {'py/reduce': [{'py/function': 'numpy._core.multiarray._reconstruct', '__doc__': '_reconstruct(subtype, shape, dtype)\n\n    Construct an empty array. Used by Pickles.'}, {'py/tuple': [{'py/type': '__main__.test_subclass_of_registered_type.<locals>.MyArray'}, {'py/tuple': [0]}, {'py/b64': 'Yg=='}]}, {'py/tuple': [1, {'py/tuple': [3]}, {'py/reduce': [{'py/type': 'numpy.dtype'}, {'py/tuple': ['i8', False, True]}, {'py/tuple': [3, '<', None, None, None, -1, -1, 0]}]}, False, {'py/b64': 'AQAAAAAAAAACAAAAAAAAAAMAAAAAAAAA'}]}]})
 
 def test_uninitialized_sequence():
     """
@@ -113,6 +113,18 @@ def test_decimal():
 def test_handlers_deserialize():
     from decimal import Decimal
     assert_equals(deserialize(serialize(Decimal('10.5'))), Decimal('10.5'))
+
+def test_function_with_docstring():
+    def func_with_doc():
+        """This is a docstring."""
+        pass
+    class A:
+        @property
+        def prop1(self):
+            """Property docstring."""
+            return 42
+    assert_equals(serialize(func_with_doc), {'py/function': '__main__.test_function_with_docstring.<locals>.func_with_doc', '__doc__': 'This is a docstring.'})
+    assert_equals(serialize(A.prop1), {'py/function': '__main__.test_function_with_docstring.<locals>.A.prop1', '__doc__': 'Property docstring.'})
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]

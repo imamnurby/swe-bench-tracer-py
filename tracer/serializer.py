@@ -59,6 +59,27 @@ PRIMITIVES = (type(None), bool, int, float, str)
 PICKLER = jsonpickle.Pickler(warn=True)
 UNPICKLER = jsonpickle.Unpickler()
 
+def pickler_flatten_function_monkey_patch(self):
+    def _flatten_function(obj):
+        if self.unpicklable:
+            name = jsonpickle.util.importable_name(obj)
+            data = {jsonpickle.tags.FUNCTION: name}
+            if obj.__doc__ and not name.startswith('builtins.'):
+                data['__doc__'] = obj.__doc__
+        else:
+            data = None
+        return data
+    return _flatten_function
+
+PICKLER._flatten_function = pickler_flatten_function_monkey_patch(PICKLER)
+
+def unpickler_restore_function_monkey_patch(self):
+    def _restore_function(obj):
+        return obj
+    return _restore_function
+
+UNPICKLER._restore_function = unpickler_restore_function_monkey_patch(UNPICKLER)
+
 @jsonpickle.handlers.register(type(iter([])))
 class IteratorHandler(BaseHandler):
     def flatten(self, obj, data):
@@ -95,6 +116,11 @@ class DecimalHandler(BaseHandler):
     
     def restore(self, obj):
         return decimal.Decimal(obj["value"])
+
+@jsonpickle.handlers.register(property)
+class PropertyHandler(BaseHandler):
+    def flatten(self, obj: property, data):
+        return PICKLER.flatten(obj.fget)
 
 def safe_hasattr(obj, attr):
     try:
