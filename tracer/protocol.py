@@ -10,6 +10,7 @@ class Event(BaseModel):
     statement: str
     filepath: str
     function_name: str
+    excluded: bool = False
     
     @staticmethod
     def from_dict(data):
