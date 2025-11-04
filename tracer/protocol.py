@@ -29,6 +29,11 @@ class Event(BaseModel):
         else:
             raise ValueError(f"Unknown event type: {event_type}")
 
+    def dump(self):
+        return self.model_dump(exclude={
+            "event_id", "line_number", "excluded",
+        })
+
     def deserialized(self):
         return self
 
@@ -41,6 +46,12 @@ class FunctionEvent(Event):
     def deserialized(self):
         self.parameters = {k: deserialize(v) for k, v in self.parameters.items()}
         return self
+    
+    def dump(self):
+        return self.model_dump(exclude={
+            "event_id", "line_number", "excluded",
+            "inherited_control_dependencies"
+        })
 
 class ReturnEvent(Event):
     vars_used: List[str]
@@ -66,3 +77,9 @@ class LineEvent(Event):
     def deserialized(self):
         self.seen_variables = {k: deserialize(v) for k, v in self.seen_variables.items()}
         return self
+
+    def dump(self):
+        return self.model_dump(exclude={
+            "event_id", "line_number", "excluded",
+            "control_dependencies", "inherited_control_dependencies",
+        })
