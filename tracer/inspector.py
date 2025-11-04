@@ -1,0 +1,133 @@
+import bdb
+import sys
+import json
+import traceback
+
+from tracer.serializer import serialize    
+
+__all__ = ['ExpressionInspector']
+
+def get_source_code_line(file_path: str, lineno: int) -> str:
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+    if lineno < 1 or lineno > len(lines):
+        raise ValueError("Line number out of range")
+    return lines[lineno - 1]
+
+class State:
+    @staticmethod
+    def dispatch_line(dbg: 'ExpressionInspector', frame):
+        raise NotImplementedError("Must be implemented by subclasses")
+    
+    @staticmethod
+    def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+        raise NotImplementedError("Must be implemented by subclasses")
+
+class Initialized(State):
+    @staticmethod
+    def dispatch_line(dbg: 'ExpressionInspector', frame):
+        if not dbg.break_here(frame):
+            return Initialized
+        if dbg.source_line.startswith('return'):
+            return Initialized
+        dbg.count -= 1
+        if dbg.count > 0:
+            return Initialized
+        dbg.set_next(frame)
+        return Breakpoint
+
+    @staticmethod
+    def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+        if not dbg.break_here(frame):
+            return Initialized
+        dbg.count -= 1
+        if dbg.count > 0:
+            return Initialized
+        frame.f_locals['__return__'] = return_value
+        dbg.eval_expr(frame)
+        return Completed
+
+class Breakpoint(State):
+    @staticmethod
+    def dispatch_line(dbg: 'ExpressionInspector', frame):
+        dbg.eval_expr(frame)
+        return Completed
+    
+    @staticmethod
+    def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+        raise RuntimeError("unreachable")
+
+class Completed(State):
+    @staticmethod
+    def dispatch_line(dbg: 'ExpressionInspector', frame):
+        raise RuntimeError("Inspection already completed")
+    
+    @staticmethod
+    def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+        raise RuntimeError("Inspection already completed")
+
+class ExpressionInspector(bdb.Bdb):
+    def __init__(self, bp_file: str, bp_line: int, expr: str, save_path=None, count=1):
+        super().__init__()
+        self.state = Initialized
+        self.source_line = get_source_code_line(bp_file, bp_line).strip()
+        self.expr = expr
+        self.count = count
+        self.save_path = save_path
+        self.result = {
+            'file': bp_file,
+            'line': bp_line,
+            'expr': expr,
+            'value': None,
+            'exception': {
+                'stage': 'not reached',
+                'type': None,
+                'message': None,
+                'traceback': None,
+            },
+        }
+        self.set_break(filename=bp_file, lineno=bp_line)
+    
+    def __enter__(self):
+        self.set_trace()
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.save_result()
+        return True # Suppress exceptions
+    
+    def user_line(self, frame):
+        self.state = self.state.dispatch_line(self, frame)
+    
+    def user_return(self, frame, return_value):
+        self.state = self.state.dispatch_return(self, frame, return_value)
+    
+    def user_exception(self, frame, exc_info):
+        etype, evalue, tb = exc_info
+        self.result['exception'] = {
+            "stage": "not reached",
+            "type": etype.__name__,
+            "message": str(evalue),
+            "traceback": traceback.format_tb(tb),
+        }
+    
+    def eval_expr(self, frame):
+        try:
+            value = eval(self.expr, frame.f_globals, frame.f_locals)
+            self.result['value'] = serialize(value)
+            self.result['exception'] = None
+        except Exception as e:
+            self.result['exception'] = {
+                'stage': 'evaluation',
+                'type': type(e).__name__,
+                'message': str(e),
+                'traceback': traceback.format_tb(e.__traceback__),
+            }
+        self.set_quit()
+    
+    def save_result(self):
+        if not self.save_path:
+            return
+        with open(self.save_path, 'w') as f:
+            json.dump(self.result, f, indent=2)
+        print("Expression value saved to {}".format(self.save_path), file=sys.stderr, flush=True)

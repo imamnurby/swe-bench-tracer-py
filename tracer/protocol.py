@@ -83,3 +83,16 @@ class LineEvent(Event):
             "event_id", "line_number", "excluded",
             "control_dependencies", "inherited_control_dependencies",
         })
+
+class InspectionException(BaseModel):
+    stage: str
+    type: Optional[str]
+    message: Optional[str]
+    traceback: Optional[List[str]]
+
+class InspectionResult(BaseModel):
+    file: str
+    line: int
+    expr: str
+    value: Optional[Any]
+    exception: Optional[InspectionException]
