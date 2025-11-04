@@ -129,25 +129,12 @@ def test_property_doc_handler():
     val = Sub.__dict__['bar']            # property with __doc__ = None
     super_method = getattr(Base, 'bar')  # property with a docstring
 
-    assert val.__doc__ is None
-    assert isinstance(super_method.__doc__, str) and "base bar doc" in super_method.__doc__
-
-    ser_val_before = serialize(val)
-    ser_super_before = serialize(super_method)
-
-    assert ser_val_before == {
-        "py/object": "builtins.property",
-        "value": {"__doc__": None},
-    }
-    assert ser_super_before.get("py/object") == "builtins.property"
-    assert isinstance(ser_super_before["value"]["__doc__"], str)
-    assert "base bar doc" in ser_super_before["value"]["__doc__"]
+    assert_equals(serialize(val), {'py/function': '__main__.test_property_doc_handler.<locals>.Sub.bar'})
+    assert_equals(serialize(super_method), {'py/function': '__main__.test_property_doc_handler.<locals>.Base.bar', '__doc__': 'base bar doc'})
 
     val.__doc__ = super_method.__doc__
 
-    ser_val_after = serialize(val)
-    assert ser_val_after.get("py/object") == "builtins.property"
-    assert ser_val_after["value"]["__doc__"] == super_method.__doc__
+    assert_equals(serialize(val), {'py/function': '__main__.test_property_doc_handler.<locals>.Sub.bar', '__doc__': 'base bar doc'})
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]

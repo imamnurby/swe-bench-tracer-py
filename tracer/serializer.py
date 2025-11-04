@@ -35,7 +35,10 @@ REGISTERED_EXT_TYPES = []
 try:
     import numpy as np
     from jsonpickle.ext import numpy as jsonpickle_numpy
-    jsonpickle_numpy.register_handlers()
+    try:
+        jsonpickle_numpy.register_handlers(ndarray_mode='ignore')
+    except Exception:
+        jsonpickle_numpy.register_handlers()
     REGISTERED_EXT_TYPES.extend([
         np.ndarray, np.dtype, np.generic, np.dtype(np.void).__class__,
         np.dtype(np.float32).__class__, np.dtype(np.int32).__class__,
@@ -120,11 +123,10 @@ class DecimalHandler(BaseHandler):
 @jsonpickle.handlers.register(property)
 class PropertyHandler(BaseHandler):
     def flatten(self, obj: property, data):
-        try: 
-            doc = obj.__doc__ 
-            return {"py/object": "builtins.property", "value": {"__doc__": doc}} 
-        except Exception: 
-            return {"py/object": "builtins.property"}
+        fn = obj.fget
+        if fn:
+            fn.__doc__ = obj.__doc__
+        return PICKLER.flatten(fn)
 
 def safe_hasattr(obj, attr):
     try:
