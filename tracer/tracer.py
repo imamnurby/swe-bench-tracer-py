@@ -27,7 +27,6 @@ class ExecutionTracer:
         self.inherited_control_stack = []
         self.control_stack_stack = []     
         self.last_def_event = defaultdict(dict)
-        self._pending_line_events = {}
         self.function_variables_stack = []
         
         # Standard library modules to exclude
@@ -530,9 +529,6 @@ class ExecutionTracer:
             self.call_stack.pop()
             source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
             _, vars_used = self._get_vars_defined_and_used(source_line)
-            if frame in self._pending_line_events:
-                prev_event = self._pending_line_events.pop(frame)
-                prev_event['seen_variables'] = serialize(frame.f_locals)
 
             if self.function_variables_stack:
                 self.function_variables_stack.pop()
@@ -550,7 +546,8 @@ class ExecutionTracer:
 
     def _handle_line_event(self, frame: FrameType) -> Optional[Callable]:
         """Handles a 'line' event by analyzing the line and dispatching to control or regular line handlers."""
-        self._finalize_pending_line_event(frame)
+        # --- CHANGED: Finalization is removed. We capture state immediately. ---
+        # self._finalize_pending_line_event(frame) 
         self._update_function_variables(frame)
 
         filename, line_no, source_line, stripped, stripped_no_comments, indent = self._compute_line_metadata(frame)
@@ -587,12 +584,6 @@ class ExecutionTracer:
                 exception_value=str(exc_value),
                 vars_used=vars_used or None
             )
-
-    def _finalize_pending_line_event(self, frame: FrameType) -> None:
-        """Updates the previously recorded pending line event with the final state of local variables."""
-        if frame in self._pending_line_events:
-            prev_event = self._pending_line_events.pop(frame)
-            prev_event['seen_variables'] = serialize(frame.f_locals)
 
     def _compute_line_metadata(self, frame: FrameType) -> Tuple[str, int, str, str, str, int]:
         """Gathers and computes metadata for the current line being executed, such as source and indentation."""
@@ -692,7 +683,8 @@ class ExecutionTracer:
             inherited_control_dependencies=inherited_ids,
             seen_variables=seen_variables
         )
-        self._pending_line_events[frame] = self.trace_data[-1]
+        # --- DELETED: No longer need to add to pending events. ---
+        # self._pending_line_events[frame] = self.trace_data[-1]
 
         if vars_defined:
             self._update_last_definitions(vars_defined)
@@ -716,7 +708,6 @@ class ExecutionTracer:
             inherited_control_dependencies=inherited_ids,
             seen_variables=seen_variables
         )
-        self._pending_line_events[frame] = self.trace_data[-1]
 
         if vars_defined:
             self._update_last_definitions(vars_defined)
