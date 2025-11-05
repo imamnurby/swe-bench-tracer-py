@@ -4,7 +4,6 @@ import sys
 import json
 import traceback
 
-from typing import Literal
 from tracer.serializer import serialize
 
 __all__ = ['ExpressionInspector']
@@ -16,7 +15,7 @@ def get_source_code_line(file_path: str, lineno: int) -> str:
         raise ValueError("Line number out of range")
     return lines[lineno - 1]
 
-def get_initial_state(mode: Literal['before', 'after']):
+def get_initial_state(mode: str):
     if mode == 'before':
         return BeforeExecution.Initialized
     elif mode == 'after':
@@ -124,7 +123,7 @@ class BeforeExecution:
 class ExpressionInspector(bdb.Bdb):
     def __init__(self, bp_file: str, bp_line: int, expr: str, 
                  save_path: str = None, count: int = 1, 
-                 mode: Literal['before', 'after'] = 'before'):
+                 mode: str = 'before'):
         super().__init__()
         assert os.path.isabs(bp_file), "bp_file must be an absolute path"
         assert count > 0, "count must be positive"
