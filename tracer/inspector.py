@@ -21,8 +21,7 @@ def get_initial_state(mode: Literal['before', 'after']):
         return BeforeExecution.Initialized
     elif mode == 'after':
         return AfterExecution.Initialized
-    else:
-        raise ValueError(f"Unknown mode: {mode}")
+    raise RuntimeError("unreachable")
 
 # State Machine Diagram
 # A. Non-return statement breakpoint
@@ -124,8 +123,12 @@ class BeforeExecution:
 
 class ExpressionInspector(bdb.Bdb):
     def __init__(self, bp_file: str, bp_line: int, expr: str, 
-                 save_path=None, count=1, mode='before'):
+                 save_path: str = None, count: int = 1, 
+                 mode: Literal['before', 'after'] = 'before'):
         super().__init__()
+        assert os.path.isabs(bp_file), "bp_file must be an absolute path"
+        assert count > 0, "count must be positive"
+        assert mode in ['before', 'after'], "mode must be 'before' or 'after'"
         self.state = get_initial_state(mode)
         self.source_line = get_source_code_line(bp_file, bp_line).strip()
         self.expr = expr
@@ -186,7 +189,8 @@ class ExpressionInspector(bdb.Bdb):
         if not self.save_path:
             return
         base_dir = os.path.dirname(self.save_path)
-        os.makedirs(base_dir, exist_ok=True)
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir, exist_ok=True)
         with open(self.save_path, 'w') as f:
             json.dump(self.result, f, indent=2)
         print("Expression value saved to {}".format(self.save_path), file=sys.stderr, flush=True)
