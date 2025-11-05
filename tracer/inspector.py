@@ -9,7 +9,7 @@ from tracer.serializer import serialize
 __all__ = ['ExpressionInspector']
 
 def get_source_code_line(file_path: str, lineno: int) -> str:
-    with open(file_path, 'r') as f:
+    with open(file_path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
     if lineno < 1 or lineno > len(lines):
         raise ValueError("Line number out of range")
@@ -190,6 +190,6 @@ class ExpressionInspector(bdb.Bdb):
         base_dir = os.path.dirname(self.save_path)
         if not os.path.exists(base_dir):
             os.makedirs(base_dir, exist_ok=True)
-        with open(self.save_path, 'w') as f:
+        with open(self.save_path, 'w', encoding='utf-8') as f:
             json.dump(self.result, f, indent=2)
         print("Expression value saved to {}".format(self.save_path), file=sys.stderr, flush=True)
