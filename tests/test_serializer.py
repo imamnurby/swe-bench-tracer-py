@@ -11,8 +11,8 @@ def test_func_types():
     def dummy_func(): ...
     class A: 
         def a(self): ...
-    assert_equals(serialize(dummy_func), {'py/function': '__main__.test_func_types.<locals>.dummy_func'})
-    assert_equals(serialize(A.a), {'py/function': '__main__.test_func_types.<locals>.A.a'})
+    assert_equals(serialize(dummy_func), {'py/function': '__main__.test_func_types.<locals>.dummy_func', '__doc__': None})
+    assert_equals(serialize(A.a), {'py/function': '__main__.test_func_types.<locals>.A.a', '__doc__': None})
     assert_equals(serialize(A().a), {'py/object': 'builtins.method'})
     assert_equals(serialize(len), {'py/function': 'builtins.len'})
 
@@ -32,7 +32,7 @@ def test_dict_of_funcs_in_class():
     
     data = A()
     serialized = serialize(data)
-    assert_equals(serialized, {'py/object': '__main__.test_dict_of_funcs_in_class.<locals>.A', 'data': {'key': {'py/function': '__main__.test_dict_of_funcs_in_class.<locals>.dummy_func'}}})
+    assert_equals(serialized, {'py/object': '__main__.test_dict_of_funcs_in_class.<locals>.A', 'data': {'key': {'py/function': '__main__.test_dict_of_funcs_in_class.<locals>.dummy_func', '__doc__': None}}})
 
 def test_normal_registered_type():
     arr = np.array([1, 2, 3])
@@ -129,7 +129,7 @@ def test_property_doc_handler():
     val = Sub.__dict__['bar']            # property with __doc__ = None
     super_method = getattr(Base, 'bar')  # property with a docstring
 
-    assert_equals(serialize(val), {'py/function': '__main__.test_property_doc_handler.<locals>.Sub.bar'})
+    assert_equals(serialize(val), {'py/function': '__main__.test_property_doc_handler.<locals>.Sub.bar', '__doc__': None})
     assert_equals(serialize(super_method), {'py/function': '__main__.test_property_doc_handler.<locals>.Base.bar', '__doc__': 'base bar doc'})
 
     val.__doc__ = super_method.__doc__
