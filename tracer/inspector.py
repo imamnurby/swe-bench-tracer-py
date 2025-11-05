@@ -1,9 +1,11 @@
+import os
 import bdb
 import sys
 import json
 import traceback
 
-from tracer.serializer import serialize    
+from typing import Literal
+from tracer.serializer import serialize
 
 __all__ = ['ExpressionInspector']
 
@@ -14,6 +16,14 @@ def get_source_code_line(file_path: str, lineno: int) -> str:
         raise ValueError("Line number out of range")
     return lines[lineno - 1]
 
+def get_initial_state(mode: Literal['before', 'after']):
+    if mode == 'before':
+        return BeforeExecution.Initialized
+    elif mode == 'after':
+        return AfterExecution.Initialized
+    else:
+        raise ValueError(f"Unknown mode: {mode}")
+
 class State:
     @staticmethod
     def dispatch_line(dbg: 'ExpressionInspector', frame):
@@ -22,40 +32,6 @@ class State:
     @staticmethod
     def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
         raise NotImplementedError("Must be implemented by subclasses")
-
-class Initialized(State):
-    @staticmethod
-    def dispatch_line(dbg: 'ExpressionInspector', frame):
-        if not dbg.break_here(frame):
-            return Initialized
-        if dbg.source_line.startswith('return'):
-            return Initialized
-        dbg.count -= 1
-        if dbg.count > 0:
-            return Initialized
-        dbg.set_next(frame)
-        return Breakpoint
-
-    @staticmethod
-    def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
-        if not dbg.break_here(frame):
-            return Initialized
-        dbg.count -= 1
-        if dbg.count > 0:
-            return Initialized
-        frame.f_locals['__return__'] = return_value
-        dbg.eval_expr(frame)
-        return Completed
-
-class Breakpoint(State):
-    @staticmethod
-    def dispatch_line(dbg: 'ExpressionInspector', frame):
-        dbg.eval_expr(frame)
-        return Completed
-    
-    @staticmethod
-    def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
-        raise RuntimeError("unreachable")
 
 class Completed(State):
     @staticmethod
@@ -66,10 +42,71 @@ class Completed(State):
     def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
         raise RuntimeError("Inspection already completed")
 
+class AfterExecution:
+    class Initialized(State):
+        @staticmethod
+        def dispatch_line(dbg: 'ExpressionInspector', frame):
+            if not dbg.break_here(frame):
+                return AfterExecution.Initialized
+            if dbg.source_line.startswith('return'):
+                return AfterExecution.Initialized
+            dbg.count -= 1
+            if dbg.count > 0:
+                return AfterExecution.Initialized
+            dbg.set_next(frame)
+            return AfterExecution.Breakpoint
+
+        @staticmethod
+        def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+            if not dbg.break_here(frame):
+                return AfterExecution.Initialized
+            dbg.count -= 1
+            if dbg.count > 0:
+                return AfterExecution.Initialized
+            frame.f_locals['__return__'] = return_value
+            dbg.eval_expr(frame)
+            return Completed
+
+    class Breakpoint(State):
+        @staticmethod
+        def dispatch_line(dbg: 'ExpressionInspector', frame):
+            dbg.eval_expr(frame)
+            return Completed
+        
+        @staticmethod
+        def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+            raise RuntimeError("unreachable")
+
+class BeforeExecution(State):
+    class Initialized(State):
+        @staticmethod
+        def dispatch_line(dbg: 'ExpressionInspector', frame):
+            if not dbg.break_here(frame):
+                return BeforeExecution.Initialized
+            if dbg.source_line.startswith('return'):
+                return BeforeExecution.Initialized
+            dbg.count -= 1
+            if dbg.count > 0:
+                return BeforeExecution.Initialized
+            dbg.eval_expr(frame)
+            return Completed
+
+        @staticmethod
+        def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+            if not dbg.break_here(frame):
+                return BeforeExecution.Initialized
+            dbg.count -= 1
+            if dbg.count > 0:
+                return BeforeExecution.Initialized
+            frame.f_locals['__return__'] = return_value
+            dbg.eval_expr(frame)
+            return Completed
+
 class ExpressionInspector(bdb.Bdb):
-    def __init__(self, bp_file: str, bp_line: int, expr: str, save_path=None, count=1):
+    def __init__(self, bp_file: str, bp_line: int, expr: str, 
+                 save_path=None, count=1, mode='before'):
         super().__init__()
-        self.state = Initialized
+        self.state = get_initial_state(mode)
         self.source_line = get_source_code_line(bp_file, bp_line).strip()
         self.expr = expr
         self.count = count
@@ -105,7 +142,7 @@ class ExpressionInspector(bdb.Bdb):
     def user_exception(self, frame, exc_info):
         etype, evalue, tb = exc_info
         self.result['exception'] = {
-            "stage": "not reached",
+            "stage": "exception before breakpoint",
             "type": etype.__name__,
             "message": str(evalue),
             "traceback": traceback.format_tb(tb),
@@ -128,6 +165,8 @@ class ExpressionInspector(bdb.Bdb):
     def save_result(self):
         if not self.save_path:
             return
+        base_dir = os.path.dirname(self.save_path)
+        os.makedirs(base_dir, exist_ok=True)
         with open(self.save_path, 'w') as f:
             json.dump(self.result, f, indent=2)
         print("Expression value saved to {}".format(self.save_path), file=sys.stderr, flush=True)

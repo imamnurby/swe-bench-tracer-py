@@ -16,7 +16,7 @@ def test_basic_function():
         b = 20
         c = a + b
         return c
-    with Inspector(FILE_PATH, 17, 'c') as inspector:
+    with Inspector(FILE_PATH, 17, 'c', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 30)
@@ -31,11 +31,11 @@ def test_function_with_exception_handled():
             b = 30
         c = a + b
         return c
-    with Inspector(FILE_PATH, 32, 'c') as inspector:
+    with Inspector(FILE_PATH, 32, 'c', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 40)
-    with Inspector(FILE_PATH, 31, 'b') as inspector:
+    with Inspector(FILE_PATH, 31, 'b', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.exception, None)
@@ -48,11 +48,11 @@ def test_function_with_exception_unhandled():
         assert False, "Intentional Failure"
         c = a + b
         return c
-    with Inspector(FILE_PATH, 49, 'c') as inspector:
+    with Inspector(FILE_PATH, 49, 'c', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, None)
-    assert_equals(result.exception.stage, 'not reached')
+    assert_equals(result.exception.stage, 'exception before breakpoint')
     assert_equals(result.exception.type, 'AssertionError')
 
 def test_more_complex_expr1():
@@ -61,11 +61,11 @@ def test_more_complex_expr1():
         b = [4, 5, 6]
         c = a + b
         return c
-    with Inspector(FILE_PATH, 62, 'len(c)') as inspector:
+    with Inspector(FILE_PATH, 62, 'len(c)', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 6)
-    with Inspector(FILE_PATH, 62, 'c[3]') as inspector:
+    with Inspector(FILE_PATH, 62, 'c[3]', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 4)
@@ -78,12 +78,12 @@ def test_variable_scope():
             return a + b
         c = inner()
         return c
-    with Inspector(FILE_PATH, 79, 'b') as inspector:
+    with Inspector(FILE_PATH, 79, 'b', mode='after') as inspector:
         func1()
     result = Result(**inspector.result)
     assert_equals(result.value, None)
     assert_equals(result.exception.type, 'NameError')
-    with Inspector(FILE_PATH, 77, 'a') as inspector:
+    with Inspector(FILE_PATH, 77, 'a', mode='after') as inspector:
         func1()
     result = Result(**inspector.result)
     assert_equals(result.value, 10)
@@ -94,7 +94,7 @@ def test_variable_scope():
             b = 20
         c = a + b
         return c
-    with Inspector(FILE_PATH, 95, 'b') as inspector:
+    with Inspector(FILE_PATH, 95, 'b', mode='after') as inspector:
         func2()
     result = Result(**inspector.result)
     assert_equals(result.value, 20)
@@ -105,7 +105,7 @@ def test_count_parameter():
         for i in range(5):
             x = i + 1
         return x
-    with Inspector(FILE_PATH, 106, 'x', count=3) as inspector:
+    with Inspector(FILE_PATH, 106, 'x', count=3, mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 3)
@@ -119,7 +119,7 @@ def test_more_complex_expr2():
                 return self.val
         obj = MyClass(42)
         return obj
-    with Inspector(FILE_PATH, 120, 'obj.get_val()') as inspector:
+    with Inspector(FILE_PATH, 120, 'obj.get_val()', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 42)
@@ -131,11 +131,11 @@ def test_library_call():
         b = np.array([4, 5, 6])
         c = a + b
         return c
-    with Inspector(FILE_PATH, 132, 'c.tolist()') as inspector:
+    with Inspector(FILE_PATH, 132, 'c.tolist()', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, [5, 7, 9])
-    with Inspector(FILE_PATH, 132, 'int(np.sum(c))') as inspector:
+    with Inspector(FILE_PATH, 132, 'int(np.sum(c))', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 21)
@@ -145,11 +145,11 @@ def test_return_inspection():
         a = 5
         b = 10
         return a * b
-    with Inspector(FILE_PATH, 147, '__return__') as inspector:
+    with Inspector(FILE_PATH, 147, '__return__', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 50)
-    with Inspector(FILE_PATH, 147, '__return__ * 2') as inspector:
+    with Inspector(FILE_PATH, 147, '__return__ * 2', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 100)
@@ -160,15 +160,15 @@ def test_function_call_in_return():
     def func():
         a = 5
         return helper(a)
-    with Inspector(FILE_PATH, 162, '__return__') as inspector:
+    with Inspector(FILE_PATH, 162, '__return__', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 6)
-    with Inspector(FILE_PATH, 162, 'helper(__return__)') as inspector:
+    with Inspector(FILE_PATH, 162, 'helper(__return__)', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 7)
-    with Inspector(FILE_PATH, 159, '__return__') as inspector:
+    with Inspector(FILE_PATH, 159, '__return__', mode='after') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value, 6)
