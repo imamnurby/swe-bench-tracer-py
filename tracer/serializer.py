@@ -67,7 +67,7 @@ def pickler_flatten_function_monkey_patch(self):
         if self.unpicklable:
             name = jsonpickle.util.importable_name(obj)
             data = {jsonpickle.tags.FUNCTION: name}
-            if obj.__doc__ and not name.startswith('builtins.'):
+            if not name.startswith('builtins.'):
                 data['__doc__'] = obj.__doc__
         else:
             data = None
