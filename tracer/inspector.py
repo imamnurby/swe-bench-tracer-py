@@ -24,6 +24,26 @@ def get_initial_state(mode: Literal['before', 'after']):
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
+# State Machine Diagram
+# A. Non-return statement breakpoint
+# A.1. Mode "after": Inspect expression after bp line is executed
+#
+#                 <bp reached>
+#    INITIALIZED -------------> BREAKPOINT ------------> COMPLETED
+#      ↖-----|     [set next]               [eval expr]    ↖---|
+#  <bp not reached>
+#
+# A.2. Mode "before": Inspect expression before bp line is executed
+#
+#                      <bp reached>
+#    INITIALIZED -----------------------> COMPLETED
+#      ↖-----|          [eval expr]         ↖---|
+#  <bp not reached>
+#
+# B. Return statement breakpoint: Same as A.2
+#
+# - bp: <file:line:count>, count is decremented on each hit until 0
+# - when count is 0, the bp is considered "reached"
 class State:
     @staticmethod
     def dispatch_line(dbg: 'ExpressionInspector', frame):
@@ -77,7 +97,7 @@ class AfterExecution:
         def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
             raise RuntimeError("unreachable")
 
-class BeforeExecution(State):
+class BeforeExecution:
     class Initialized(State):
         @staticmethod
         def dispatch_line(dbg: 'ExpressionInspector', frame):
