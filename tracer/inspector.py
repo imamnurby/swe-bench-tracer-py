@@ -134,8 +134,10 @@ class ExpressionInspector(bdb.Bdb):
         self.count = count
         self.save_path = save_path
         self.result = {
+            'mode': mode,
             'file': bp_file,
             'line': bp_line,
+            'count': count,
             'expr': expr,
             'value': None,
             'exception': {
