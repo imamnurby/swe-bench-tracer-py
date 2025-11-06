@@ -2,7 +2,7 @@ import os
 import sys
 import threading
 
-from tracer import ExecutionTracer
+from tracer import ExecutionTracer, ExpressionInspector
 
 _state = threading.local()
 
@@ -265,7 +265,7 @@ def _looks_like_sympy_test(frame):
             return co.co_name
     return None
 
-def _profile(frame, event, arg):
+def _profile_tracer(frame, event, arg):
     st = getattr(_state, "stack", None)
     if st is None:
         _state.stack = st = []
@@ -298,12 +298,63 @@ def _profile(frame, event, arg):
             _state.tracer = None
         return
 
-def _install():
-    sys.setprofile(_profile)
+def _profile_inspector(frame, event, arg):
+    st = getattr(_state, "stack", None)
+    if st is None:
+        _state.stack = st = []
+        _state.active = False
+        _state.tid = None
+        _state.inspector = None
+    if event == "call":
+        if not _state.active:
+            tid = _looks_like_sympy_test(frame)
+            if tid:
+                _state.active = True
+                _state.tid = tid
+                _state.inspector = ExpressionInspector(
+                    bp_file=os.environ.get('INSPECTOR_BP_FILE'),
+                    bp_line=int(os.environ.get('INSPECTOR_BP_LINE')),
+                    expr=os.environ.get('INSPECTOR_EXPR'),
+                    save_path=os.path.join(os.environ.get('INSPECTOR_OUTPUT_DIR'), "{}.jsonl".format(tid)),
+                    count=int(os.environ.get('INSPECTOR_COUNT')),
+                    mode=os.environ.get('INSPECTOR_MODE')
+                )
+                st.append("root")
+                _state.inspector.set_trace()
+                return
+        if _state.active:
+            st.append("call")
+    elif event == "return" and _state.active:
+        if st:
+            st.pop()
+        if not st:
+            _state.inspector.save_result()
+            _state.active = False
+            _state.tid = None
+            _state.inspector = None
+            sys.exit(0)
+        return
+
+def _install_tracer():
+    sys.setprofile(_profile_tracer)
     try:
-        threading.setprofile(_profile)
+        threading.setprofile(_profile_tracer)
     except Exception:
         pass
 
-if os.environ.get("ENABLE_TRACER", "0") == "1":
-    _install()
+def _install_inspector():
+    sys.setprofile(_profile_inspector)
+    try:
+        threading.setprofile(_profile_inspector)
+    except Exception:
+        pass
+
+if __name__ == "__main__":
+    enable_tracer = os.environ.get("ENABLE_TRACER", "0") == "1"
+    enable_inspector = os.environ.get("ENABLE_INSPECTOR", "0") == "1"
+    if enable_inspector and enable_tracer:
+        raise RuntimeError("Cannot enable both tracer and inspector")
+    if enable_tracer:
+        _install_tracer()
+    elif enable_inspector:
+        _install_inspector()
