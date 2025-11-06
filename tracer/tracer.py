@@ -251,13 +251,17 @@ class ExecutionTracer:
             if func_name == '__init__' and name == 'self':
                 continue
             if name in frame.f_locals:
+                self.stop_tracing()
                 params[name] = serialize(frame.f_locals[name])
+                self.start_tracing()
         
         # Handle *args and **kwargs
         if code.co_flags & 0x04: 
             varargs_name = code.co_varnames[code.co_argcount]
             if varargs_name in frame.f_locals:
+                self.stop_tracing()
                 params['*' + varargs_name] = serialize(frame.f_locals[varargs_name])
+                self.start_tracing()
                 
         if code.co_flags & 0x08: 
             kwargs_index = code.co_argcount
@@ -265,7 +269,9 @@ class ExecutionTracer:
                 kwargs_index += 1
             kwargs_name = code.co_varnames[kwargs_index]
             if kwargs_name in frame.f_locals:
+                self.stop_tracing()
                 params['**' + kwargs_name] = serialize(frame.f_locals[kwargs_name])
+                self.start_tracing()
                 
         return params
     
@@ -316,7 +322,9 @@ class ExecutionTracer:
         # Update only local variables
         for var_name in local_var_names:
             if var_name in frame.f_locals:
+                self.stop_tracing()
                 current_func_vars[var_name] = serialize(frame.f_locals[var_name])
+                self.start_tracing()
     
     def _get_current_seen_variables(self) -> Dict[str, Any]:
         """Get a copy of the current function's seen variables"""
@@ -535,6 +543,7 @@ class ExecutionTracer:
             if self.inherited_control_stack:
                 self.inherited_control_stack.pop()
 
+            self.stop_tracing()
             self._add_trace_entry(
                 'Return',
                 frame,
@@ -543,6 +552,7 @@ class ExecutionTracer:
                 caller_name=caller_name_after_return,
                 return_value=serialize(arg)
             )
+            self.start_tracing()
 
     def _handle_line_event(self, frame: FrameType) -> Optional[Callable]:
         """Handles a 'line' event by analyzing the line and dispatching to control or regular line handlers."""
