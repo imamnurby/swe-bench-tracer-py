@@ -1,4 +1,5 @@
 import io
+import sys
 import json
 import inspect
 import jsonpickle
@@ -60,7 +61,9 @@ def safe_hasattr(obj, attr):
     except AttributeError:
         return False
 
-def non_serializable(obj):
+def non_serializable(obj, exc=None):
+    if exc:
+        print('Object of type {} is not serializable due to exception: {}'.format(type(obj).__name__, str(exc)), file=sys.stderr, flush=True)
     return "<{}>".format(type(obj).__name__)
 
 def serialize(x):
@@ -70,8 +73,8 @@ def serialize(x):
     if isinstance(x, tuple(REGISTERED_EXT_TYPES)):
         try:
             return PICKLER.flatten(x)
-        except AttributeError:
-            return non_serializable(x)
+        except AttributeError as e:
+            return non_serializable(x, e)
     
     if isinstance(x, Mapping):
         out = {}
@@ -85,9 +88,9 @@ def serialize(x):
             for v in list(x):
                 out.append(serialize(v))
             return out if not isinstance(x, tuple) else tuple(out)
-        except AttributeError:
-            return non_serializable(x)
-    
+        except AttributeError as e:
+            return non_serializable(x, e)
+
     if any([
         inspect.isframe(x), inspect.iscode(x), inspect.istraceback(x),
         safe_hasattr(x, '__iter__') and not isinstance(x, (bytes, bytearray, io.IOBase)),
@@ -96,8 +99,8 @@ def serialize(x):
     
     try:
         return PICKLER.flatten(x)
-    except Exception:
-        return non_serializable(x)
+    except Exception as e:
+        return non_serializable(x, e)
 
 def dump(x):
     return json.dumps(serialize(x))
