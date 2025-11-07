@@ -1,13 +1,10 @@
 import io
 import json
-import types
-import socket
-import decimal
 import inspect
 import jsonpickle
 
 from collections.abc import Mapping, Sequence, Set
-from jsonpickle.handlers import BaseHandler
+from tracer.serializer.ext import register_handlers
 
 def registry_get_monkey_patch(self):
     '''
@@ -30,34 +27,7 @@ def registry_get_monkey_patch(self):
 
 jsonpickle.handlers.get = registry_get_monkey_patch(jsonpickle.handlers.registry)
 
-REGISTERED_EXT_TYPES = []
-
-try:
-    import numpy as np
-    from jsonpickle.ext import numpy as jsonpickle_numpy
-    try:
-        jsonpickle_numpy.register_handlers(ndarray_mode='ignore')
-    except Exception:
-        jsonpickle_numpy.register_handlers()
-    REGISTERED_EXT_TYPES.extend([
-        np.ndarray, np.dtype, np.generic, np.dtype(np.void).__class__,
-        np.dtype(np.float32).__class__, np.dtype(np.int32).__class__,
-        np.dtype(np.datetime64).__class__, np.datetime64,
-    ])
-except ImportError:
-    pass
-
-try:
-    import pandas as pd
-    from jsonpickle.ext import pandas as jsonpickle_pandas
-    jsonpickle_pandas.register_handlers()
-    REGISTERED_EXT_TYPES.extend([
-        pd.DataFrame, pd.Series, pd.Index, pd.PeriodIndex,
-        pd.MultiIndex, pd.Timestamp, pd.Period, pd.Interval,
-    ])
-except ImportError:
-    pass
-
+REGISTERED_EXT_TYPES = register_handlers()
 PRIMITIVES = (type(None), bool, int, float, str)
 PICKLER = jsonpickle.Pickler(warn=True)
 UNPICKLER = jsonpickle.Unpickler()
@@ -82,51 +52,6 @@ def unpickler_restore_function_monkey_patch(self):
     return _restore_function
 
 UNPICKLER._restore_function = unpickler_restore_function_monkey_patch(UNPICKLER)
-
-@jsonpickle.handlers.register(type(iter([])))
-class IteratorHandler(BaseHandler):
-    def flatten(self, obj, data):
-        return {"__iterator__": type(obj).__name__}
-
-@jsonpickle.handlers.register(types.GeneratorType)
-class GeneratorHandler(BaseHandler):
-    def flatten(self, obj, data):
-        return {"__generator__": getattr(obj, 'gi_code').co_name if hasattr(obj, 'gi_code') else type(obj).__name__}
-
-@jsonpickle.handlers.register(io.IOBase)
-class FileHandler(BaseHandler):
-    def flatten(self, obj: io.IOBase, data):
-        try:
-            name = obj.name
-        except Exception:
-            name = None
-        return {"io.IOBase": {"name": name, "closed": obj.closed}}
-
-@jsonpickle.handlers.register(io.TextIOWrapper)
-class TextIOHandler(BaseHandler):
-    def flatten(self, obj: io.TextIOWrapper, data):
-        return {"io.TextIOWrapper": {"name": obj.name, "mode": obj.mode, "encoding": obj.encoding}}
-
-@jsonpickle.handlers.register(socket.socket)
-class SocketHandler(BaseHandler):
-    def flatten(self, obj: socket.socket, data):
-        return {"socket.socket": {"fd": obj.fileno(), "family": obj.family, "type": obj.type, "proto": obj.proto}}
-
-@jsonpickle.handlers.register(decimal.Decimal)
-class DecimalHandler(BaseHandler):
-    def flatten(self, obj: decimal.Decimal, data):
-        return {"py/object": "decimal.Decimal", "value": str(obj)}
-    
-    def restore(self, obj):
-        return decimal.Decimal(obj["value"])
-
-@jsonpickle.handlers.register(property)
-class PropertyHandler(BaseHandler):
-    def flatten(self, obj: property, data):
-        fn = obj.fget
-        if fn:
-            fn.__doc__ = obj.__doc__
-        return PICKLER.flatten(fn)
 
 def safe_hasattr(obj, attr):
     try:
