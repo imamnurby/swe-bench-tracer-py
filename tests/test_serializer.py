@@ -99,8 +99,8 @@ def test_custom_handlers():
     import sys, socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.close()
-    assert_equals(serialize(sock), {"socket.socket": {"fd": sock.fileno(), "family": sock.family, "type": sock.type, "proto": sock.proto}})
-    assert_equals(serialize(sys.stdout), {"io.TextIOWrapper": {"name": sys.stdout.name, "mode": sys.stdout.mode, "encoding": sys.stdout.encoding}})
+    assert_equals(serialize(sock), {"py/object": "socket.socket", "fd": sock.fileno(), "family": sock.family, "type": sock.type, "proto": sock.proto})
+    assert_equals(serialize(sys.stdout), {"py/object": "io.TextIOWrapper", "name": sys.stdout.name, "mode": sys.stdout.mode, "encoding": sys.stdout.encoding})
 
 def test_decimal():
     from decimal import Decimal

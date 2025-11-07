@@ -8,14 +8,14 @@ from jsonpickle.handlers import BaseHandler, register
 
 class IteratorHandler(BaseHandler):
     def flatten(self, obj, data):
-        return {"__iterator__": type(obj).__name__}
+        return {"py/object": "__iterator__", "type": type(obj).__name__}
     
     def restore(self, obj):
         return obj
 
 class GeneratorHandler(BaseHandler):
     def flatten(self, obj, data):
-        return {"__generator__": getattr(obj, 'gi_code').co_name if hasattr(obj, 'gi_code') else type(obj).__name__}
+        return {"py/object": "__generator__", "name": getattr(obj, 'gi_code').co_name if hasattr(obj, 'gi_code') else type(obj).__name__}
     
     def restore(self, obj):
         return obj
@@ -26,21 +26,21 @@ class FileHandler(BaseHandler):
             name = obj.name
         except Exception:
             name = None
-        return {"io.IOBase": {"name": name, "closed": obj.closed}}
+        return {"py/object": "io.IOBase", "name": name, "closed": obj.closed}
     
     def restore(self, obj):
         return obj
 
 class TextIOHandler(BaseHandler):
     def flatten(self, obj: io.TextIOWrapper, data):
-        return {"io.TextIOWrapper": {"name": obj.name, "mode": obj.mode, "encoding": obj.encoding}}
+        return {"py/object": "io.TextIOWrapper", "name": obj.name, "mode": obj.mode, "encoding": obj.encoding}
     
     def restore(self, obj):
         return obj
 
 class SocketHandler(BaseHandler):
     def flatten(self, obj: socket.socket, data):
-        return {"socket.socket": {"fd": obj.fileno(), "family": obj.family, "type": obj.type, "proto": obj.proto}}
+        return {"py/object": "socket.socket", "fd": obj.fileno(), "family": obj.family, "type": obj.type, "proto": obj.proto}
     
     def restore(self, obj):
         return obj
