@@ -13,6 +13,8 @@ from pathlib import Path
 from tracer.util import get_func_qualname
 from tracer.serializer import serialize, dump
 
+__all__ = ['ExecutionTracer']
+
 class ExecutionTracer:
     def __init__(self, output_file: str = "trace.jsonl"):
         self.call_stack = []
