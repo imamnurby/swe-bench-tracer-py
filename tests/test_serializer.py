@@ -136,6 +136,13 @@ def test_property_doc_handler():
 
     assert_equals(serialize(val), {'py/function': '__main__.test_property_doc_handler.<locals>.Sub.bar', '__doc__': 'base bar doc'})
 
+def test_custom_handlers2():
+    import uuid
+    u1 = uuid.uuid4()
+    u2 = uuid.uuid4()
+    assert_equals(u1 != u2, True)
+    assert_equals(serialize(u1) == serialize(u2), True)
+
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
     for test_func in test_funcs:
