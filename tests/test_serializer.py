@@ -143,6 +143,14 @@ def test_custom_handlers2():
     assert_equals(u1 != u2, True)
     assert_equals(serialize(u1) == serialize(u2), True)
 
+    import datetime
+    dt1 = datetime.datetime(2025, 1, 1, 12, 0, 0, 0, tzinfo=datetime.timezone.utc)
+    d1 = datetime.date(2025, 1, 1)
+    t1 = datetime.time(14, 30, 0, 0, tzinfo=datetime.timezone.utc)
+    assert_equals(serialize(dt1), {'py/object': 'datetime.datetime', 'year': 2025, 'month': 1, 'day': 1, 'hour': 12, 'minute': 0, 'second': 0, 'microsecond': 0, 'tzinfo': {'py/reduce': [{'py/type': 'datetime.timezone'}, {'py/tuple': [{'py/reduce': [{'py/type': 'datetime.timedelta'}, {'py/tuple': [0, 0, 0]}]}]}]}, 'fold': 0})
+    assert_equals(serialize(d1), {'py/object': 'datetime.date', 'year': 2025, 'month': 1, 'day': 1})
+    assert_equals(serialize(t1), {'py/object': 'datetime.time', 'hour': 14, 'minute': 30, 'second': 0, 'microsecond': 0, 'tzinfo': {'py/reduce': [{'py/type': 'datetime.timezone'}, {'py/tuple': [{'py/reduce': [{'py/type': 'datetime.timedelta'}, {'py/tuple': [0, 0, 0]}]}]}]}})
+
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
     for test_func in test_funcs:
