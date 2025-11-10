@@ -28,6 +28,7 @@ def pytest_addoption(parser):
     group.addoption('--inspector-mode', choices=['before', 'after'], default='before')
     # Optional options
     group.addoption('--test-name', default=None)
+    group.addoption('--include-stdlib', default=None)
 
 def pytest_configure(config):
     config._mode = config.getoption('--mode')
@@ -39,6 +40,11 @@ def pytest_configure(config):
     config._count = config.getoption('--count')
     config._inspector_mode = config.getoption('--inspector-mode')
     config._test_name = config.getoption('--test-name')
+    _inc = config.getoption('--include-stdlib')
+    if _inc is None or _inc.strip().lower() == 'none':
+        config._include_stdlib = set()
+    else:
+        config._include_stdlib = set(s.strip() for s in _inc.split(',') if s.strip())
     try:
         validate_options(config)
     except AssertionError as e:
@@ -47,6 +53,8 @@ def pytest_configure(config):
 def pytest_unconfigure(config):
     del config._mode, config._output, config._disable, config._bp_file
     del config._bp_line, config._expr, config._count, config._inspector_mode
+    if hasattr(config, "_include_stdlib"):
+        del config._include_stdlib
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):
@@ -60,7 +68,7 @@ def pytest_runtest_call(item):
         return
     output_file = os.path.join(config._output, "{}.jsonl".format(test_name))
     if config._mode == 'tracer':
-        with ExecutionTracer(output_file):
+        with ExecutionTracer(output_file=output_file, include_stdlib=config._include_stdlib):
             yield
         return
     if config._mode == 'inspector':

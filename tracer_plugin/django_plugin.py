@@ -1557,7 +1557,8 @@ def _profile_tracer(frame, event, arg):
             if tid:
                 _state.active = True
                 _state.tid = tid
-                _state.tracer = ExecutionTracer(os.path.join(os.environ.get('TRACER_OUTPUT_DIR'), "{}.jsonl".format(tid)))
+                output_file=os.path.join(os.environ.get('TRACER_OUTPUT_DIR'), "{}.jsonl".format(tid)) # type: ignore
+                _state.tracer = ExecutionTracer(output_file=output_file, include_stdlib={"unittest"})
                 st.append("root")
                 _state.tracer.start_tracing()
                 return
