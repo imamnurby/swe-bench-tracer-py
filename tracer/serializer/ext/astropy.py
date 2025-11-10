@@ -74,6 +74,34 @@ class TableHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class TimeSeriesHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result =  {"py/object": canonical_class_name(obj)}
+        try:
+            result.update(
+                self.context.flatten({
+                    "time": obj.time,
+                })
+            )
+        except Exception:
+            pass
+        return result
+
+    def restore(self, obj):
+        return obj
+    
+class LexerHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result =  {"py/object": canonical_class_name(obj)}
+        try:
+            result.update(obj.__dict__)
+        except Exception:
+            pass
+        return result
+
+    def restore(self, obj):
+        return obj
+
 def try_import_astropy(mod_name: str, class_names: list[str], handler: BaseHandler, base=False):
     for class_name in class_names:
         try:
@@ -134,10 +162,19 @@ try_import_astropy(
     "astropy.table",
     ["Table"],
     TableHandler,
-    base=True,
+)
+try_import_astropy(
+    "astropy.timeseries",
+    ["TimeSeries"],
+    TimeSeriesHandler,
+)
+try_import_astropy(
+    "astropy.extern.ply.lex",
+    ["Lexer"],
+    LexerHandler,
 )
 
-def register_handlers():
-    for cls, handler, base in ASTROPY_REGISTRY:
-        register(cls, handler, base=base)
-    return [cls for cls, _, _ in ASTROPY_REGISTRY]
+# def register_handlers():
+#     for cls, handler, base in ASTROPY_REGISTRY:
+#         register(cls, handler, base=base)
+#     return [cls for cls, _, _ in ASTROPY_REGISTRY]
