@@ -7,7 +7,7 @@ import io, tokenize
 import inspect
 
 from collections import defaultdict
-from typing import Any, Dict, List, Tuple, Optional, Match, Callable
+from typing import Any, Dict, List, Tuple, Optional, Match, Callable, Set
 from types import FrameType
 from pathlib import Path
 from tracer.util import get_func_qualname
@@ -16,7 +16,7 @@ from tracer.serializer import serialize, dump
 __all__ = ['ExecutionTracer']
 
 class ExecutionTracer:
-    def __init__(self, output_file: str = "trace.jsonl"):
+    def __init__(self, output_file: str = "trace.jsonl",  include_stdlib: Optional[Set[str]] = None):
         self.call_stack = []
         self.call_graph = defaultdict(set)
         self.call_counts = defaultdict(int)
@@ -30,6 +30,7 @@ class ExecutionTracer:
         self.control_stack_stack = []     
         self.last_def_event = defaultdict(dict)
         self.function_variables_stack = []
+        self.include_stdlib = include_stdlib or set()
         
         # Standard library modules to exclude
         self.stdlib_modules = {
@@ -135,6 +136,9 @@ class ExecutionTracer:
         normalized_path = os.path.normpath(filename)
         path_parts = normalized_path.split(os.sep)
         
+        if any(part in self.include_stdlib for part in path_parts):
+            return False
+
         # Check if any part of the path matches stdlib modules
         if any(part in self.stdlib_modules for part in path_parts):
             return True
@@ -152,6 +156,8 @@ class ExecutionTracer:
         ]
         
         if any(py_path in normalized_path for py_path in python_paths):
+            if any(part in self.include_stdlib for part in path_parts):
+                return False
             return True
                 
         return False
