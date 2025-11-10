@@ -151,6 +151,27 @@ def test_custom_handlers2():
     assert_equals(serialize(d1), {'py/object': 'datetime.date', 'year': 2025, 'month': 1, 'day': 1})
     assert_equals(serialize(t1), {'py/object': 'datetime.time', 'hour': 14, 'minute': 30, 'second': 0, 'microsecond': 0, 'tzinfo': {'py/reduce': [{'py/type': 'datetime.timezone'}, {'py/tuple': [{'py/reduce': [{'py/type': 'datetime.timedelta'}, {'py/tuple': [0, 0, 0]}]}]}]}})
 
+def test_astropy_handler():
+    try:
+        from astropy import units as u
+        from astropy.time import Time
+        from astropy.units import Quantity
+        from astropy.table import Table, Column
+        from astropy.coordinates import EarthLocation
+    except ImportError:
+        print(f"test_astropy_handler: SKIPPED (astropy not installed)")
+        return
+    
+    t = Time(2457389.0, format='mjd', location=EarthLocation(1000, 2000, 3000, unit=u.km))
+    q = Quantity([1, 2, 3], unit=u.km)
+    col = Column(data=[1 , 2, 3], name='a', unit=u.km)
+    tab = Table([[1, 2, 3], [4, 5, 6]], names=('a', 'b'), units=(u.km, u.km))
+    
+    assert_equals(serialize(t), {'py/object': 'astropy.time.core.Time', 'jd1': 4857390.0, 'jd2': -0.5, 'format': 'mjd', 'scale': 'utc', 'precision': 3, 'in_subfmt': '*', 'out_subfmt': '*', 'location': {'py/object': 'astropy.coordinates.earth.EarthLocation', 'x': {'py/object': 'astropy.units.quantity.Quantity', 'value': {'py/object': 'numpy.float64', 'dtype': 'float64', 'value': 1000.0}, 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}}, 'y': {'py/object': 'astropy.units.quantity.Quantity', 'value': {'py/object': 'numpy.float64', 'dtype': 'float64', 'value': 2000.0}, 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}}, 'z': {'py/object': 'astropy.units.quantity.Quantity', 'value': {'py/object': 'numpy.float64', 'dtype': 'float64', 'value': 3000.0}, 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}}, 'ellipsoid': 'WGS84'}})
+    assert_equals(serialize(q), {'py/object': 'astropy.units.quantity.Quantity', 'value': {'py/object': 'numpy.ndarray', 'base': {'py/object': 'numpy.ndarray', 'dtype': 'float64', 'values': [1.0, 2.0, 3.0]}, 'shape': (3,), 'dtype': 'float64', 'values': [1.0, 2.0, 3.0]}, 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}})
+    assert_equals(serialize(col), {'py/object': 'astropy.table.column.Column', 'data': {'py/object': 'numpy.ndarray', 'base': {'py/object': 'numpy.ndarray', 'dtype': 'int64', 'values': [1, 2, 3]}, 'shape': (3,), 'dtype': 'int64', 'values': [1, 2, 3]}, 'name': 'a', 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}, 'format': None})
+    assert_equals(serialize(tab), {'py/object': 'astropy.table.table.Table', 'columns': {'py/object': 'astropy.table.table.TableColumns', 'a': {'py/object': 'astropy.table.column.Column', 'data': {'py/object': 'numpy.ndarray', 'base': {'py/object': 'numpy.ndarray', 'dtype': 'int64', 'values': [1, 2, 3]}, 'shape': (3,), 'dtype': 'int64', 'values': [1, 2, 3]}, 'name': 'a', 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}, 'format': None}, 'b': {'py/object': 'astropy.table.column.Column', 'data': {'py/object': 'numpy.ndarray', 'base': {'py/object': 'numpy.ndarray', 'dtype': 'int64', 'values': [4, 5, 6]}, 'shape': (3,), 'dtype': 'int64', 'values': [4, 5, 6]}, 'name': 'b', 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}, 'format': None}, '__dict__': {}}, 'masked': False})
+
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
     for test_func in test_funcs:
