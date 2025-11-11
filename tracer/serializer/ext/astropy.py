@@ -102,7 +102,7 @@ class LexerHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
-def try_import_astropy(mod_name: str, class_names: list[str], handler: BaseHandler, base=False):
+def try_import_astropy(mod_name: str, class_names: list, handler: BaseHandler, base=False):
     for class_name in class_names:
         try:
             mod = __import__(mod_name, fromlist=[class_name])
