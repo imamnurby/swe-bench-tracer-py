@@ -87,7 +87,7 @@ def exception_guard(func):
     @wraps(func)
     def wrapper(x):
         recursion_limit = sys.getrecursionlimit()
-        new_limit = min(recursion_limit, get_stackdepth() + 50)
+        new_limit = min(recursion_limit, get_stackdepth() + 200)
         try:
             if new_limit < recursion_limit:
                 sys.setrecursionlimit(new_limit)
