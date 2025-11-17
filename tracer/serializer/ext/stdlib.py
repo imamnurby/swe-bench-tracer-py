@@ -116,7 +116,13 @@ class TimeHandler(BaseHandler):
         }
     
     def restore(self, obj):
-        return obj
+        return datetime.time(
+            hour=obj["hour"],
+            minute=obj["minute"],
+            second=obj["second"],
+            microsecond=obj["microsecond"],
+            tzinfo=self.context.restore(obj["tzinfo"], reset=False),
+        )
 
 def register_handlers():
     register(type(iter([])), IteratorHandler)
