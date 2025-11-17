@@ -4,6 +4,8 @@ import json
 import inspect
 import jsonpickle
 
+from functools import wraps
+from itertools import count
 from collections.abc import Mapping, Sequence, Set
 from tracer.serializer.ext import register_handlers
 
@@ -63,18 +65,47 @@ def safe_hasattr(obj, attr):
 
 def non_serializable(obj, exc=None):
     if exc:
-        print('Object of type {} is not serializable due to exception: {}'.format(type(obj).__name__, str(exc)), file=sys.stderr, flush=True)
+        msg = str(exc)
+        if isinstance(exc, UserWarning) and '<lambda>' not in msg:
+            print(msg, file=sys.stderr, flush=True)
+        elif not isinstance(exc, RecursionError):
+            print('Object of type "{}" is non-serializable due to {}: {}'.format(type(obj).__name__, type(exc).__name__, msg), file=sys.stderr, flush=True)
+            print('--- object repr ---', file=sys.stderr, flush=True)
+            print(obj, file=sys.stderr, flush=True)
     return "<{}>".format(type(obj).__name__)
 
+def get_stackdepth(size=2):
+    if sys._getframe().f_back.f_back is None:
+        return 1
+    frame = sys._getframe(size)
+    for size in count(size):
+        frame = frame.f_back
+        if not frame:
+            return size
+
+def exception_guard(func):
+    @wraps(func)
+    def wrapper(x):
+        recursion_limit = sys.getrecursionlimit()
+        new_limit = min(recursion_limit, get_stackdepth() + 50)
+        try:
+            if new_limit < recursion_limit:
+                sys.setrecursionlimit(new_limit)
+            return func(x)
+        except Exception as e:
+            return non_serializable(x, e)
+        finally:
+            if sys.getrecursionlimit() != recursion_limit:
+                sys.setrecursionlimit(recursion_limit)
+    return wrapper
+
+@exception_guard
 def serialize(x):
     if isinstance(x, PRIMITIVES):
         return x
     
     if isinstance(x, tuple(REGISTERED_EXT_TYPES)):
-        try:
-            return PICKLER.flatten(x)
-        except AttributeError as e:
-            return non_serializable(x, e)
+        return PICKLER.flatten(x)
     
     if isinstance(x, Mapping):
         out = {}
@@ -83,13 +114,10 @@ def serialize(x):
         return out
     
     if isinstance(x, (Sequence, Set)):
-        try:
-            out = []
-            for v in list(x):
-                out.append(serialize(v))
-            return out if not isinstance(x, tuple) else tuple(out)
-        except AttributeError as e:
-            return non_serializable(x, e)
+        out = []
+        for v in list(x):
+            out.append(serialize(v))
+        return out if not isinstance(x, tuple) else tuple(out)
 
     if any([
         inspect.isframe(x), inspect.iscode(x), inspect.istraceback(x),
@@ -97,10 +125,7 @@ def serialize(x):
     ]):
         return non_serializable(x)
     
-    try:
-        return PICKLER.flatten(x)
-    except Exception as e:
-        return non_serializable(x, e)
+    return PICKLER.flatten(x)
 
 def dump(x):
     return json.dumps(serialize(x))
