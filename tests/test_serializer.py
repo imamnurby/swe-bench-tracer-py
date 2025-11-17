@@ -1,8 +1,15 @@
+import os
+import sys
 import traceback
 import numpy as np
 
+from io import StringIO
 from collections.abc import Sequence
+from contextlib import redirect_stdout, redirect_stderr
+
 from tracer.serializer import serialize, deserialize
+
+SYS_STDOUT = sys.stdout
 
 def assert_equals(obj, expected):
     assert obj == expected, f"Provided: {obj}\nExpected: {expected}"
@@ -96,11 +103,11 @@ def test_partially_initialized_numpy_array():
     assert_equals(serialized, "<UninitializedArray>")
 
 def test_custom_handlers():
-    import sys, socket
+    import socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.close()
     assert_equals(serialize(sock), {"py/object": "socket.socket", "fd": sock.fileno(), "family": sock.family, "type": sock.type, "proto": sock.proto})
-    assert_equals(serialize(sys.stdout), {"py/object": "io.TextIOWrapper", "name": sys.stdout.name, "mode": sys.stdout.mode, "encoding": sys.stdout.encoding})
+    assert_equals(serialize(SYS_STDOUT), {"py/object": "io.TextIOWrapper", "name": SYS_STDOUT.name, "mode": SYS_STDOUT.mode, "encoding": SYS_STDOUT.encoding})
 
 def test_decimal():
     from decimal import Decimal
@@ -152,34 +159,53 @@ def test_custom_handlers2():
     assert_equals(serialize(t1), {'py/object': 'datetime.time', 'hour': 14, 'minute': 30, 'second': 0, 'microsecond': 0, 'tzinfo': {'py/reduce': [{'py/type': 'datetime.timezone'}, {'py/tuple': [{'py/reduce': [{'py/type': 'datetime.timedelta'}, {'py/tuple': [0, 0, 0]}]}]}]}})
 
 def test_astropy_handler():
-    try:
-        from astropy import units as u
-        from astropy.time import Time
-        from astropy.units import Quantity
-        from astropy.table import Table, Column
-        from astropy.coordinates import EarthLocation
-    except ImportError:
-        print(f"test_astropy_handler: SKIPPED (astropy not installed)")
-        return
+    from astropy import units as u
+    from astropy.time import Time
+    from astropy.units import Quantity, CompositeUnit
+    from astropy.table import Table, Column
+    from astropy.coordinates import EarthLocation
     
     t = Time(2457389.0, format='mjd', location=EarthLocation(1000, 2000, 3000, unit=u.km))
     q = Quantity([1, 2, 3], unit=u.km)
-    col = Column(data=[1 , 2, 3], name='a', unit=u.km)
+    col = Column(data=[1, 2, 3], name='a', unit=u.km)
     tab = Table([[1, 2, 3], [4, 5, 6]], names=('a', 'b'), units=(u.km, u.km))
+    cu = CompositeUnit(1, [u.km, u.s], [1, -1])
     
     assert_equals(serialize(t), {'py/object': 'astropy.time.core.Time', 'jd1': 4857390.0, 'jd2': -0.5, 'format': 'mjd', 'scale': 'utc', 'precision': 3, 'in_subfmt': '*', 'out_subfmt': '*', 'location': {'py/object': 'astropy.coordinates.earth.EarthLocation', 'x': {'py/object': 'astropy.units.quantity.Quantity', 'value': {'py/object': 'numpy.float64', 'dtype': 'float64', 'value': 1000.0}, 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}}, 'y': {'py/object': 'astropy.units.quantity.Quantity', 'value': {'py/object': 'numpy.float64', 'dtype': 'float64', 'value': 2000.0}, 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}}, 'z': {'py/object': 'astropy.units.quantity.Quantity', 'value': {'py/object': 'numpy.float64', 'dtype': 'float64', 'value': 3000.0}, 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}}, 'ellipsoid': 'WGS84'}})
     assert_equals(serialize(q), {'py/object': 'astropy.units.quantity.Quantity', 'value': {'py/object': 'numpy.ndarray', 'base': {'py/object': 'numpy.ndarray', 'dtype': 'float64', 'values': [1.0, 2.0, 3.0]}, 'shape': (3,), 'dtype': 'float64', 'values': [1.0, 2.0, 3.0]}, 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}})
     assert_equals(serialize(col), {'py/object': 'astropy.table.column.Column', 'data': {'py/object': 'numpy.ndarray', 'base': {'py/object': 'numpy.ndarray', 'dtype': 'int64', 'values': [1, 2, 3]}, 'shape': (3,), 'dtype': 'int64', 'values': [1, 2, 3]}, 'name': 'a', 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}, 'format': None})
     assert_equals(serialize(tab), {'py/object': 'astropy.table.table.Table', 'columns': {'py/object': 'astropy.table.table.TableColumns', 'a': {'py/object': 'astropy.table.column.Column', 'data': {'py/object': 'numpy.ndarray', 'base': {'py/object': 'numpy.ndarray', 'dtype': 'int64', 'values': [1, 2, 3]}, 'shape': (3,), 'dtype': 'int64', 'values': [1, 2, 3]}, 'name': 'a', 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}, 'format': None}, 'b': {'py/object': 'astropy.table.column.Column', 'data': {'py/object': 'numpy.ndarray', 'base': {'py/object': 'numpy.ndarray', 'dtype': 'int64', 'values': [4, 5, 6]}, 'shape': (3,), 'dtype': 'int64', 'values': [4, 5, 6]}, 'name': 'b', 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}, 'format': None}, '__dict__': {}}, 'masked': False})
+    assert_equals(serialize(cu), {'py/object': 'astropy.units.core.CompositeUnit', 'unit': 'km / s'})
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
+    passed = 0
+    skipped = 0
+    failed = 0
     for test_func in test_funcs:
+        stdout = StringIO()
+        stderr = StringIO()
         try:
-            test_func()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                test_func()
             print(f"{test_func.__name__}: PASS")
+            passed += 1
+        except ImportError:
+            print(f"{test_func.__name__}: SKIP (third-party module not installed)")
+            skipped += 1
         except Exception as e:
             print(f"{test_func.__name__}: FAIL")
             print(f'==== {test_func.__name__} ====')
             traceback.print_exc()
             print('=======================')
+            failed += 1
+        finally:
+            out_content = stdout.getvalue()
+            err_content = stderr.getvalue()
+            if out_content.strip():
+                print(f"*** stdout of {test_func.__name__} ***")
+                print(out_content)
+            if err_content.strip():
+                print(f"*** stderr of {test_func.__name__} ***")
+                print(err_content)
+    print(f"{passed} passed, {skipped} skipped, {failed} failed.")
