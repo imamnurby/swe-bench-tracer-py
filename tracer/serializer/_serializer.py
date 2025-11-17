@@ -68,10 +68,8 @@ def non_serializable(obj, exc=None):
         msg = str(exc)
         if isinstance(exc, UserWarning) and '<lambda>' not in msg:
             print(msg, file=sys.stderr, flush=True)
-        elif not isinstance(exc, RecursionError):
+        else:
             print('Object of type "{}" is non-serializable due to {}: {}'.format(type(obj).__name__, type(exc).__name__, msg), file=sys.stderr, flush=True)
-            print('--- object repr ---', file=sys.stderr, flush=True)
-            print(obj, file=sys.stderr, flush=True)
     return "<{}>".format(type(obj).__name__)
 
 def get_stackdepth(size=2):
