@@ -26,13 +26,29 @@ class UnitHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class DataInfoHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            result.update(
+                self.context.flatten(obj._represent_as_dict())
+            )
+        except (AttributeError, KeyError, TypeError):
+            pass
+        return result
+
+    def restore(self, obj):
+        return obj
+
 class GeneralAstropyHandler(BaseHandler):
     def flatten(self, obj, data):
         result =  {"py/object": canonical_class_name(obj)}
-        if safe_hasattr(obj, "info") and safe_hasattr(obj.info, "_represent_as_dict"):
+        try:
             result.update(
                 self.context.flatten(obj.info._represent_as_dict())
             )
+        except (AttributeError, KeyError, TypeError):
+            pass
         return result
 
     def restore(self, obj):
@@ -57,9 +73,28 @@ class ColumnHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class RowHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result =  {"py/object": canonical_class_name(obj)}
+        try:
+            result.update(
+                self.context.flatten({
+                    "data": obj.__array__(),
+                })
+            )
+        except AttributeError:
+            pass
+        return result
+
+    def restore(self, obj):
+        return obj
+
 class TableHandler(BaseHandler):
     def flatten(self, obj, data):
         result =  {"py/object": canonical_class_name(obj)}
+        # Heuristics to detect if object instatiation is incomplete
+        if not hasattr(obj, 'indices'):
+            return result
         try:
             result.update(
                 self.context.flatten({
@@ -119,6 +154,26 @@ try_import_astropy(
     base=True,
 )
 try_import_astropy(
+    "astropy.time",
+    ["TimeInfo"],
+    DataInfoHandler,
+)
+try_import_astropy(
+    "astropy.table.column",
+    ["ColumnInfo", "MaskedColumnInfo"],
+    DataInfoHandler,
+)
+try_import_astropy(
+    "astropy.units",
+    ["QuantityInfo"],
+    DataInfoHandler,
+)
+try_import_astropy(
+    "astropy.coordinates.earth",
+    ["EarthLocationInfo"],
+    DataInfoHandler,
+)
+try_import_astropy(
     "astropy.units", 
     ["Quantity", "Magnitude", "Dex", "Decibel"],
     GeneralAstropyHandler,
@@ -147,12 +202,6 @@ try_import_astropy(
     GeneralAstropyHandler,
 )
 try_import_astropy(
-    "astropy.table",
-    ["ColumnInfo"],
-    GeneralAstropyHandler,
-    base=True,
-)
-try_import_astropy(
     "astropy.table.column",
     ["BaseColumn"],
     ColumnHandler,
@@ -160,8 +209,14 @@ try_import_astropy(
 )
 try_import_astropy(
     "astropy.table",
+    ["Row"],
+    RowHandler,
+)
+try_import_astropy(
+    "astropy.table",
     ["Table"],
     TableHandler,
+    base=True,
 )
 try_import_astropy(
     "astropy.timeseries",
@@ -174,7 +229,7 @@ try_import_astropy(
     LexerHandler,
 )
 
-# def register_handlers():
-#     for cls, handler, base in ASTROPY_REGISTRY:
-#         register(cls, handler, base=base)
-#     return [cls for cls, _, _ in ASTROPY_REGISTRY]
+def register_handlers():
+    for cls, handler, base in ASTROPY_REGISTRY:
+        register(cls, handler, base=base)
+    return [cls for cls, _, _ in ASTROPY_REGISTRY]
