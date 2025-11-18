@@ -1561,6 +1561,8 @@ def _profile_tracer(frame, event, arg):
                 _state.tracer = ExecutionTracer(output_file=output_file, include_stdlib={"unittest"})
                 st.append("root")
                 _state.tracer.start_tracing()
+                _state.tracer._handle_call_event(frame, _state.tracer._get_function_info(frame))
+                frame.f_trace = _state.tracer._trace_function
                 return
         if _state.active:
             st.append("call")

@@ -281,6 +281,8 @@ def _profile_tracer(frame, event, arg):
                 _state.tracer = ExecutionTracer(os.path.join(os.environ.get('TRACER_OUTPUT_DIR'), "{}.jsonl".format(tid)))
                 st.append("root")
                 _state.tracer.start_tracing()
+                _state.tracer._handle_call_event(frame, _state.tracer._get_function_info(frame))
+                frame.f_trace = _state.tracer._trace_function
                 return
         if _state.active:
             st.append("call")
