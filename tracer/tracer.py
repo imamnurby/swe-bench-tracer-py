@@ -32,40 +32,6 @@ class ExecutionTracer:
         self.function_variables_stack = []
         self.include_stdlib = include_stdlib or set()
         
-        # Standard library modules to exclude
-        self.stdlib_modules = {
-            'abc', '_aix_support', '_android_support', 'annotationlib', 'antigravity', 
-            '_apple_support', 'argparse', 'ast', '_ast_unparse', 'asyncio', 'base64', 
-            'bdb', 'bisect', 'bz2', 'calendar', 'cmd', 'codecs', 'codeop', 'code', 
-            'collections', '_collections_abc', '_colorize', 'colorsys', '_compat_pickle', 
-            'compileall', 'compression', 'concurrent', 'configparser', 'contextlib', 
-            'contextvars', 'copy', 'copyreg', 'cProfile', 'csv', 'ctypes', 'curses', 
-            'dataclasses', 'datetime', 'dbm', 'decimal', 'difflib', 'dis', 'doctest', 
-            'email', 'encodings', 'ensurepip', 'enum', 'filecmp', 'fileinput', 'fnmatch', 
-            'fractions', 'ftplib', 'functools', '__future__', 'genericpath', 'getopt', 
-            'getpass', 'gettext', 'glob', 'graphlib', 'gzip', 'hashlib', 'heapq', 
-            '__hello__', 'hmac', 'html', 'http', 'idlelib', 'imaplib', 'importlib', 
-            'inspect', 'io', '_ios_support', 'ipaddress', 'json', 'keyword', 'linecache', 
-            'locale', 'logging', 'lzma', 'mailbox', '_markupbase', 'mimetypes', 
-            'modulefinder', 'multiprocessing', 'netrc', 'ntpath', 'nturl2path', 'numbers', 
-            '_opcode_metadata', 'opcode', 'operator', 'optparse', 'os', '_osx_support', 
-            'pathlib', 'pdb', '__phello__', 'pickle', 'pickletools', 'pkgutil', 
-            'platform', 'plistlib', 'poplib', 'posixpath', 'pprint', 'profile', 
-            'profiling', 'pstats', 'pty', '_py_abc', 'pyclbr', 'py_compile', 
-            '_pydatetime', '_pydecimal', 'pydoc_data', 'pydoc', '_pyio', '_pylong', 
-            '_pyrepl', '_py_warnings', 'queue', 'quopri', 'random', 're', 'reprlib', 
-            'rlcompleter', 'runpy', 'sched', 'secrets', 'selectors', 'shelve', 'shlex', 
-            'shutil', 'signal', '_sitebuiltins', 'site', 'smtplib', 'socket', 
-            'socketserver', 'sqlite3', 'ssl', 'statistics', 'stat', 'string', 
-            'stringprep', '_strptime', 'struct', 'subprocess', 'symtable', 'sysconfig', 
-            'tabnanny', 'tarfile', 'tempfile', 'test', 'textwrap', 'this', 
-            '_threading_local', 'threading', 'timeit', 'tkinter', 'tokenize', 'token', 
-            'tomllib', 'traceback', 'tracemalloc', 'trace', 'tree', 'tty', 'turtledemo', 
-            'turtle', 'types', 'typing', 'unittest', 'urllib', 'uuid', 'venv', 
-            'warnings', 'wave', 'weakref', '_weakrefset', 'webbrowser', 'wsgiref', 
-            'xml', 'xmlrpc', 'zipapp', 'zipfile', 'zipimport', 'zoneinfo'
-        }
-        
     def __enter__(self):
         self.start_tracing()
         return self
