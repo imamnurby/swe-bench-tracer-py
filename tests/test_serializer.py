@@ -12,7 +12,18 @@ from tracer.serializer import serialize, deserialize
 SYS_STDOUT = sys.stdout
 
 def assert_equals(obj, expected):
-    assert obj == expected, f"Provided: {obj}\nExpected: {expected}"
+    if hasattr(obj, 'equals'):
+        assert obj.equals(expected), f"Provided: {obj}\nExpected: {expected}"
+    else:
+        assert obj == expected, f"Provided: {obj}\nExpected: {expected}"
+
+def assert_invertible(obj):
+    try:
+        assert_equals(obj, deserialize(serialize(obj)))
+    except AssertionError as e:
+        raise e
+    except Exception as e:
+        raise AssertionError(f"Object of type {type(obj)} is not invertible: {e}")
 
 def test_func_types():
     def dummy_func(): ...
@@ -55,7 +66,7 @@ def test_subclass_of_registered_type():
     obj = np.array([1, 2, 3]).view(MyArray)
     serialized = serialize(obj)
     
-    assert_equals(serialized, {'py/reduce': [{'py/function': 'numpy._core.multiarray._reconstruct', '__doc__': '_reconstruct(subtype, shape, dtype)\n\n    Construct an empty array. Used by Pickles.'}, {'py/tuple': [{'py/type': '__main__.test_subclass_of_registered_type.<locals>.MyArray'}, {'py/tuple': [0]}, {'py/b64': 'Yg=='}]}, {'py/tuple': [1, {'py/tuple': [3]}, {'py/reduce': [{'py/type': 'numpy.dtype'}, {'py/tuple': ['i8', False, True]}, {'py/tuple': [3, '<', None, None, None, -1, -1, 0]}]}, False, {'py/b64': 'AQAAAAAAAAACAAAAAAAAAAMAAAAAAAAA'}]}]})
+    assert_equals(serialized, {'py/reduce': [{'py/function': 'numpy._core.multiarray._reconstruct', '__doc__': '_reconstruct(subtype, shape, dtype)\n\n    Construct an empty array. Used by Pickles.'}, {'py/tuple': [{'py/type': '__main__.test_subclass_of_registered_type.<locals>.MyArray'}, {'py/tuple': [0]}, {'py/b64': 'Yg=='}]}, {'py/tuple': [1, {'py/tuple': [3]}, {'py/object': 'numpy.dtypes.Int64DType', 'dtype': 'int64'}, False, {'py/b64': 'AQAAAAAAAAACAAAAAAAAAAMAAAAAAAAA'}]}]})
 
 def test_uninitialized_sequence():
     """
@@ -176,6 +187,79 @@ def test_astropy_handler():
     assert_equals(serialize(col), {'py/object': 'astropy.table.column.Column', 'data': {'py/object': 'numpy.ndarray', 'base': {'py/object': 'numpy.ndarray', 'dtype': 'int64', 'values': [1, 2, 3]}, 'shape': (3,), 'dtype': 'int64', 'values': [1, 2, 3]}, 'name': 'a', 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}, 'format': None})
     assert_equals(serialize(tab), {'py/object': 'astropy.table.table.Table', 'columns': {'py/object': 'astropy.table.table.TableColumns', 'a': {'py/object': 'astropy.table.column.Column', 'data': {'py/object': 'numpy.ndarray', 'base': {'py/object': 'numpy.ndarray', 'dtype': 'int64', 'values': [1, 2, 3]}, 'shape': (3,), 'dtype': 'int64', 'values': [1, 2, 3]}, 'name': 'a', 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}, 'format': None}, 'b': {'py/object': 'astropy.table.column.Column', 'data': {'py/object': 'numpy.ndarray', 'base': {'py/object': 'numpy.ndarray', 'dtype': 'int64', 'values': [4, 5, 6]}, 'shape': (3,), 'dtype': 'int64', 'values': [4, 5, 6]}, 'name': 'b', 'unit': {'py/object': 'astropy.units.core.PrefixUnit', 'unit': 'km'}, 'format': None}, '__dict__': {}}, 'masked': False})
     assert_equals(serialize(cu), {'py/object': 'astropy.units.core.CompositeUnit', 'unit': 'km / s'})
+
+def test_sympy_handler():
+    from sympy import (
+        Symbol, MatrixSymbol, S,
+        Add, Pow, LessThan,
+        Float, Rational, Quaternion,
+        cos, ZZ, Matrix, Poly, Identity,
+    )
+    from sympy.abc import y
+    from mpmath import mpf
+    
+    x = Symbol('x', positive=True)
+    mat_sym = MatrixSymbol('A', 2, 2)
+    add = Add(x, y)
+    pow = Pow(x, 2)
+    lt = LessThan(x, 10)
+    float_val = Float('3.14')
+    rational_val = Rational(22, 7)
+    mpf_val = mpf('3.14')
+    cos_x = cos(x)
+    mat = Matrix([[1, 2], [3, 4]])
+    quat = Quaternion(1, 2, 3, 4)
+    poly = Poly(x**2 + 2*x, domain="R")
+    
+    from sympy.tensor.array import Array
+
+    assert_equals(serialize(x), {'py/object': 'sympy.core.symbol.Symbol', 'name': 'x', '_assumptions_orig': {'positive': True}})
+    assert_invertible(x)
+    
+    assert_equals(serialize(y), {'py/object': 'sympy.core.symbol.Symbol', 'name': 'y', '_assumptions_orig': {}})
+    assert_invertible(y)
+    
+    assert_equals(serialize(mat_sym), {'py/object': 'sympy.matrices.expressions.matexpr.MatrixSymbol', 'name': 'A', 'shape': [{'py/object': 'sympy.core.numbers.Integer', 'p': 2}, {'py/object': 'sympy.core.numbers.Integer', 'p': 2}]})
+    assert_invertible(mat_sym)
+    
+    assert_equals(serialize(add), {'py/object': 'sympy.core.add.Add', 'args': [{'py/object': 'sympy.core.symbol.Symbol', 'name': 'y', '_assumptions_orig': {}}, {'py/object': 'sympy.core.symbol.Symbol', 'name': 'x', '_assumptions_orig': {'positive': True}}]})
+    assert_invertible(add)
+    
+    assert_equals(serialize(pow), {'py/object': 'sympy.core.power.Pow', 'args': [{'py/object': 'sympy.core.symbol.Symbol', 'name': 'x', '_assumptions_orig': {'positive': True}}, {'py/object': 'sympy.core.numbers.Integer', 'p': 2}]})
+    assert_invertible(pow)
+    
+    assert_equals(serialize(lt), {'py/object': 'sympy.core.relational.LessThan', 'args': [{'py/object': 'sympy.core.symbol.Symbol', 'name': 'x', '_assumptions_orig': {'positive': True}}, {'py/object': 'sympy.core.numbers.Integer', 'p': 10}]})
+    assert_invertible(lt)
+    
+    assert_equals(serialize(float_val), {'py/object': 'sympy.core.numbers.Float', '_mpf_': {'py/tuple': [0, 7070651414971679, -51, 53]}, '_prec': 53})
+    assert_invertible(float_val)
+    
+    assert_equals(serialize(rational_val), {'py/object': 'sympy.core.numbers.Rational', 'p': 22, 'q': 7})
+    assert_invertible(rational_val)
+    
+    assert_equals(serialize(mpf_val), {'py/object': 'mpmath.ctx_mp_python.mpf', '__str__': '3.14'})
+    assert_invertible(mpf_val)
+    
+    assert_equals(serialize(cos_x), {'py/object': 'sympy.functions.elementary.trigonometric.cos', 'args': [{'py/object': 'sympy.core.symbol.Symbol', 'name': 'x', '_assumptions_orig': {'positive': True}}]})
+    assert_invertible(cos_x)
+    
+    assert_equals(serialize(mat), {'py/object': 'sympy.matrices.dense.MutableDenseMatrix', '_rep': {'py/object': 'sympy.polys.matrices.domainmatrix.DomainMatrix', 'rep': {'py/object': 'sympy.polys.matrices.sdm.SDM', '0': {'0': 1, '1': 2}, '1': {'0': 3, '1': 4}, '__dict__': {'shape': {'py/tuple': [2, 2]}, 'rows': 2, 'cols': 2, 'domain': {'py/object': 'sympy.polys.domains.integerring.IntegerRing'}}}, 'shape': [2, 2], 'domain': {'py/object': 'sympy.polys.domains.integerring.IntegerRing'}}})
+    assert_invertible(mat)
+    
+    assert_equals(serialize(quat), {'py/object': 'sympy.algebras.quaternion.Quaternion', 'a': 1, 'b': 2, 'c': 3, 'd': 4, '_real_field': True, '_norm': None})
+    assert_invertible(quat)
+    
+    assert_equals(serialize(poly), {'py/object': 'sympy.polys.polytools.Poly', 'rep': {'py/object': 'sympy.polys.polyclasses.DMP_Python', '_rep': [{'py/object': 'mpmath.ctx_mp_python.mpf', '__str__': '1.0'}, {'py/object': 'mpmath.ctx_mp_python.mpf', '__str__': '2.0'}, {'py/object': 'mpmath.ctx_mp_python.mpf', '__str__': '0.0'}], 'dom': {'py/object': 'sympy.polys.domains.realfield.RealField'}, 'lev': 0}, 'gens': [{'py/object': 'sympy.core.symbol.Symbol', 'name': 'x', '_assumptions_orig': {'positive': True}}]})
+    assert_invertible(poly)
+    
+    assert_equals(serialize(ZZ), {'py/object': 'sympy.polys.domains.integerring.IntegerRing'})
+    assert_invertible(ZZ)
+    
+    assert_equals(serialize(S.Pi), {'py/object': 'sympy.core.numbers.Pi'})
+    assert_invertible(S.Pi)
+    
+    assert_invertible(Identity(3))
+    
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
