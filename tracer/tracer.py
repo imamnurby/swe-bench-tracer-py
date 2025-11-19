@@ -139,10 +139,6 @@ class ExecutionTracer:
         if any(part in self.include_stdlib for part in path_parts):
             return False
 
-        # Check if any part of the path matches stdlib modules
-        if any(part in self.stdlib_modules for part in path_parts):
-            return True
-
         # Exclude calls to third-party libraries
         if 'site-packages' in normalized_path:
             return True
