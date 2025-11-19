@@ -13,10 +13,12 @@ def registry_get_monkey_patch(self):
     '''
     - Base handler is registered for type A
     - An instance of type B (subclass of A) is requested
-    - Only return the base handler if A and B are defined in the same module
+    - Only return the base handler if A and B are defined in the same top module
     '''
     def is_same_module(cls_or_name: type, cls: type):
-        return cls_or_name.__module__ == cls.__module__
+        cls_or_name_module = cls_or_name.__module__.split('.')[0]
+        cls_module = cls.__module__.split('.')[0]
+        return cls_or_name_module == cls_module
     
     def get(cls_or_name, default=None):
         handler = self._handlers.get(cls_or_name)
