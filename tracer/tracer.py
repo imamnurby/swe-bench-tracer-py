@@ -344,7 +344,7 @@ class ExecutionTracer:
         self.function_variables_stack.append(func_vars)
         # parameter_sources = self._compute_parameter_sources(frame, func_info)
         parameter_sources = {}
-        self._update_call_graph(func_info)
+        # self._update_call_graph(func_info)
         self.call_stack.append(func_info)
         self._record_function_entry(frame, func_info, parameters, parameter_sources, caller_snapshot)
 
@@ -443,14 +443,14 @@ class ExecutionTracer:
     #     return parameter_sources
 
 
-    def _update_call_graph(self, func_info: Dict[str, Any]) -> None:
-        """Updates the call graph by adding an edge from the caller to the callee."""
-        if self.call_stack:
-            caller_info = self.call_stack[-1]
-            caller_name = caller_info['qualified_name']
-            callee_name = func_info['qualified_name']
-            self.call_graph[caller_name].add(callee_name)
-            self.call_counts[(caller_name, callee_name)] += 1
+    # def _update_call_graph(self, func_info: Dict[str, Any]) -> None:
+    #     """Updates the call graph by adding an edge from the caller to the callee."""
+    #     if self.call_stack:
+    #         caller_info = self.call_stack[-1]
+    #         caller_name = caller_info['qualified_name']
+    #         callee_name = func_info['qualified_name']
+    #         self.call_graph[caller_name].add(callee_name)
+    #         self.call_counts[(caller_name, callee_name)] += 1
 
 
     def _record_function_entry(self, frame: FrameType, func_info: Dict[str, Any], parameters: Dict[str, Any], parameter_sources: Dict[str, Optional[List[Dict[str, Any]]]], caller_snapshot: List[Dict[str, Any]]) -> None:
