@@ -11,6 +11,8 @@ class Event(BaseModel):
     filepath: str
     function_name: str
     excluded: bool = False
+    current_fn_block: Optional[Any] = None  # type: ignore
+    executed_fn_block: Optional[Any] = None  # type: ignore
     
     @staticmethod
     def from_dict(data):
