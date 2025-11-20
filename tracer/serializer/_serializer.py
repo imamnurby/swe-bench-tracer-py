@@ -6,6 +6,7 @@ import jsonpickle
 from collections.abc import Mapping, Sequence, Set
 from tracer.serializer.ext import register_handlers
 from tracer.serializer.util import (
+    PRIMITIVES,
     safe_hasattr,
     non_serializable,
     exception_guard,
@@ -36,7 +37,6 @@ def registry_get_monkey_patch(self):
 jsonpickle.handlers.get = registry_get_monkey_patch(jsonpickle.handlers.registry)
 
 REGISTERED_EXT_TYPES = register_handlers()
-PRIMITIVES = (type(None), bool, int, float, str)
 PICKLER = jsonpickle.Pickler(warn=True)
 UNPICKLER = jsonpickle.Unpickler()
 

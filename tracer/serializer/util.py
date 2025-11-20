@@ -5,6 +5,8 @@ import inspect
 from itertools import count
 from functools import wraps, partial
 
+PRIMITIVES = (type(None), bool, int, float, str)
+
 def safe_hasattr(obj, attr):
     try:
         inspect.getattr_static(obj, attr)
@@ -48,12 +50,26 @@ def _exception_guard(func, max_depth=200):
 
 exception_guard = partial(_exception_guard, max_depth=200)
 
+def inherits_numpy(cls):
+    return any(
+        _cls.__module__.startswith('numpy')
+        for _cls in cls.__mro__
+    )
+
+def safe_copy(obj):
+    if any([
+        isinstance(obj, PRIMITIVES),
+        inherits_numpy(obj.__class__),
+    ]):
+        return obj
+    try:
+        return pickle.loads(pickle.dumps(obj, pickle.HIGHEST_PROTOCOL))
+    except Exception:
+        return obj
+
 def isolate_parameters(func):
     @wraps(func)
     def wrapper(x):
-        try:
-            _x = pickle.loads(pickle.dumps(x, pickle.HIGHEST_PROTOCOL))
-        except Exception:
-            _x = x
+        _x = safe_copy(x)
         return func(_x)
     return wrapper
