@@ -342,7 +342,8 @@ class ExecutionTracer:
         parameters = self._get_function_parameters(frame)
         func_vars = dict(parameters)
         self.function_variables_stack.append(func_vars)
-        parameter_sources = self._compute_parameter_sources(frame, func_info)
+        # parameter_sources = self._compute_parameter_sources(frame, func_info)
+        parameter_sources = {}
         self._update_call_graph(func_info)
         self.call_stack.append(func_info)
         self._record_function_entry(frame, func_info, parameters, parameter_sources, caller_snapshot)
@@ -366,80 +367,80 @@ class ExecutionTracer:
         self.max_depth = max(self.max_depth, current_depth)
 
 
-    def _compute_parameter_sources(self, frame: FrameType, func_info: Dict[str, Any]) -> Dict[str, Optional[List[Dict[str, Any]]]]:
-        """Determines the source variables in the caller's frame for each parameter of the current function."""
-        parameter_sources = {}
+    # def _compute_parameter_sources(self, frame: FrameType, func_info: Dict[str, Any]) -> Dict[str, Optional[List[Dict[str, Any]]]]:
+    #     """Determines the source variables in the caller's frame for each parameter of the current function."""
+    #     parameter_sources = {}
 
-        caller_frame = frame.f_back
-        caller_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
+    #     caller_frame = frame.f_back
+    #     caller_qualified = self.call_stack[-1]['qualified_name'] if self.call_stack else "<module>"
 
-        code = frame.f_code
-        param_count = code.co_argcount
-        param_names = list(code.co_varnames[:param_count])
+    #     code = frame.f_code
+    #     param_count = code.co_argcount
+    #     param_names = list(code.co_varnames[:param_count])
 
-        idx = param_count
-        varargs_name = None
-        kwargs_name = None
-        if code.co_flags & 0x04:  # CO_VARARGS
-            varargs_name = code.co_varnames[idx]
-            param_names.append(varargs_name)
-            idx += 1
-        if code.co_flags & 0x08:  # CO_VARKEYWORDS
-            kwargs_name = code.co_varnames[idx]
-            param_names.append(kwargs_name)
+    #     idx = param_count
+    #     varargs_name = None
+    #     kwargs_name = None
+    #     if code.co_flags & 0x04:  # CO_VARARGS
+    #         varargs_name = code.co_varnames[idx]
+    #         param_names.append(varargs_name)
+    #         idx += 1
+    #     if code.co_flags & 0x08:  # CO_VARKEYWORDS
+    #         kwargs_name = code.co_varnames[idx]
+    #         param_names.append(kwargs_name)
 
-        # Parse caller source
-        pos_arg_vars, kw_arg_vars = [], {}
-        try:
-            if caller_frame is not None:
-                caller_src = self._get_source_line(caller_frame.f_code.co_filename, caller_frame.f_lineno)
-                pos_arg_vars, kw_arg_vars = self._get_call_arg_varnames_from_call_line(
-                    caller_src, func_info['func_name']
-                )
-        except Exception:
-            pos_arg_vars, kw_arg_vars = [], {}
+    #     # Parse caller source
+    #     pos_arg_vars, kw_arg_vars = [], {}
+    #     try:
+    #         if caller_frame is not None:
+    #             caller_src = self._get_source_line(caller_frame.f_code.co_filename, caller_frame.f_lineno)
+    #             pos_arg_vars, kw_arg_vars = self._get_call_arg_varnames_from_call_line(
+    #                 caller_src, func_info['func_name']
+    #             )
+    #     except Exception:
+    #         pos_arg_vars, kw_arg_vars = [], {}
 
-        fixed_count = param_count
-        for i, pname in enumerate(param_names):
-            found_varnames = []
+    #     fixed_count = param_count
+    #     for i, pname in enumerate(param_names):
+    #         found_varnames = []
 
-            if pname in kw_arg_vars:
-                found_varnames = kw_arg_vars.get(pname, []) or []
-            elif i < fixed_count:
-                if i < len(pos_arg_vars):
-                    found_varnames = pos_arg_vars[i] or []
-            elif varargs_name is not None and pname == varargs_name:
-                extra = pos_arg_vars[fixed_count:] if len(pos_arg_vars) > fixed_count else []
-                agg = []
-                for sub in extra:
-                    agg.extend(sub)
-                found_varnames = agg
-            elif kwargs_name is not None and pname == kwargs_name:
-                found_varnames = kw_arg_vars.get('__KW_EXPANSION__', []) or []
+    #         if pname in kw_arg_vars:
+    #             found_varnames = kw_arg_vars.get(pname, []) or []
+    #         elif i < fixed_count:
+    #             if i < len(pos_arg_vars):
+    #                 found_varnames = pos_arg_vars[i] or []
+    #         elif varargs_name is not None and pname == varargs_name:
+    #             extra = pos_arg_vars[fixed_count:] if len(pos_arg_vars) > fixed_count else []
+    #             agg = []
+    #             for sub in extra:
+    #                 agg.extend(sub)
+    #             found_varnames = agg
+    #         elif kwargs_name is not None and pname == kwargs_name:
+    #             found_varnames = kw_arg_vars.get('__KW_EXPANSION__', []) or []
 
-            # Fallback heuristic
-            if not found_varnames and caller_frame is not None:
-                raw_val = frame.f_locals.get(pname, None)
-                found_names = []
-                for cname, cval in caller_frame.f_locals.items():
-                    try:
-                        if raw_val is cval or raw_val == cval:
-                            found_names.append(cname)
-                    except Exception:
-                        pass
-                found_varnames = list(dict.fromkeys(found_names))
+    #         # Fallback heuristic
+    #         if not found_varnames and caller_frame is not None:
+    #             raw_val = frame.f_locals.get(pname, None)
+    #             found_names = []
+    #             for cname, cval in caller_frame.f_locals.items():
+    #                 try:
+    #                     if raw_val is cval or raw_val == cval:
+    #                         found_names.append(cname)
+    #                 except Exception:
+    #                     pass
+    #             found_varnames = list(dict.fromkeys(found_names))
 
-            # Map varnames → event_id
-            if found_varnames:
-                mapped = []
-                for vname in found_varnames:
-                    src_event = self.last_def_event.get(caller_qualified, {}).get(vname)
-                    mapped.append({"var": vname, "event_id": src_event})
-                parameter_sources[pname] = mapped
-            else:
-                parameter_sources[pname] = None
+    #         # Map varnames → event_id
+    #         if found_varnames:
+    #             mapped = []
+    #             for vname in found_varnames:
+    #                 src_event = self.last_def_event.get(caller_qualified, {}).get(vname)
+    #                 mapped.append({"var": vname, "event_id": src_event})
+    #             parameter_sources[pname] = mapped
+    #         else:
+    #             parameter_sources[pname] = None
 
-        return parameter_sources
+    #     return parameter_sources
 
 
     def _update_call_graph(self, func_info: Dict[str, Any]) -> None:
