@@ -1,13 +1,16 @@
 import io
-import sys
 import json
 import inspect
 import jsonpickle
 
-from functools import wraps
-from itertools import count
 from collections.abc import Mapping, Sequence, Set
 from tracer.serializer.ext import register_handlers
+from tracer.serializer.util import (
+    safe_hasattr,
+    non_serializable,
+    exception_guard,
+    isolate_parameters,
+)
 
 def registry_get_monkey_patch(self):
     '''
@@ -58,47 +61,7 @@ def unpickler_restore_function_monkey_patch(self):
 
 UNPICKLER._restore_function = unpickler_restore_function_monkey_patch(UNPICKLER)
 
-def safe_hasattr(obj, attr):
-    try:
-        inspect.getattr_static(obj, attr)
-        return True
-    except AttributeError:
-        return False
-
-def non_serializable(obj, exc=None):
-    if exc:
-        msg = str(exc)
-        if isinstance(exc, UserWarning) and '<lambda>' not in msg:
-            print(msg, file=sys.stderr, flush=True)
-        else:
-            print('Object of type "{}" is non-serializable due to {}: {}'.format(type(obj).__name__, type(exc).__name__, msg), file=sys.stderr, flush=True)
-    return "<{}>".format(type(obj).__name__)
-
-def get_stackdepth(size=2):
-    if sys._getframe().f_back.f_back is None:
-        return 1
-    frame = sys._getframe(size)
-    for size in count(size):
-        frame = frame.f_back
-        if not frame:
-            return size
-
-def exception_guard(func):
-    @wraps(func)
-    def wrapper(x):
-        recursion_limit = sys.getrecursionlimit()
-        new_limit = min(recursion_limit, get_stackdepth() + 200)
-        try:
-            if new_limit < recursion_limit:
-                sys.setrecursionlimit(new_limit)
-            return func(x)
-        except Exception as e:
-            return non_serializable(x, e)
-        finally:
-            if sys.getrecursionlimit() != recursion_limit:
-                sys.setrecursionlimit(recursion_limit)
-    return wrapper
-
+@isolate_parameters
 @exception_guard
 def serialize(x):
     if isinstance(x, PRIMITIVES):
