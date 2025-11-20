@@ -534,17 +534,19 @@ class ExecutionTracer:
         is_elif_else = stripped.startswith(('elif', 'else', 'except', 'finally'))
 
         # Manage control stack indentation rules
-        self._update_control_stack_for_indent(indent, is_elif_else)
+        # self._update_control_stack_for_indent(indent, is_elif_else)
 
-        control_deps, inherited_ids = self._compute_control_dependencies()
-
+        # control_deps, inherited_ids = self._compute_control_dependencies()
+        control_deps = []
+        inherited_ids = []
+        
         # Determine if this is a control-header line (if/for/while/with)
-        m = re.match(r'^(if|elif|for|while|with)\b', stripped_no_comments)
-        if m:
-            self._handle_control_header_line(frame, m, vars_defined, vars_used, control_deps, inherited_ids,
-                                            stripped_no_comments, indent)
-        else:
-            self._handle_regular_line(frame, vars_defined, vars_used, control_deps, inherited_ids)
+        # m = re.match(r'^(if|elif|for|while|with)\b', stripped_no_comments)
+        # if m:
+        #     self._handle_control_header_line(frame, m, vars_defined, vars_used, control_deps, inherited_ids,
+        #                                     stripped_no_comments, indent)
+        # else:
+        self._handle_regular_line(frame, vars_defined, vars_used, control_deps, inherited_ids)
 
     def _handle_exception_event(self, frame: FrameType, arg: Tuple[type, BaseException, Any]) -> None:
         """Handles an 'exception' event by recording the exception details in the trace."""
@@ -574,103 +576,103 @@ class ExecutionTracer:
         return filename, line_no, source_line, stripped, stripped_no_comments, indent
 
 
-    def _update_control_stack_for_indent(self, indent: int, is_elif_else: bool) -> None:
-        """Manages the control flow stack by popping entries based on changes in code indentation."""
-        if is_elif_else:
-            while self.control_stack and indent < self.control_stack[-1]['indent']:
-                self.control_stack.pop()
-        else:
-            while self.control_stack and indent <= self.control_stack[-1]['indent']:
-                self.control_stack.pop()
+    # def _update_control_stack_for_indent(self, indent: int, is_elif_else: bool) -> None:
+    #     """Manages the control flow stack by popping entries based on changes in code indentation."""
+    #     if is_elif_else:
+    #         while self.control_stack and indent < self.control_stack[-1]['indent']:
+    #             self.control_stack.pop()
+    #     else:
+    #         while self.control_stack and indent <= self.control_stack[-1]['indent']:
+    #             self.control_stack.pop()
 
 
-    def _compute_control_dependencies(self) -> Tuple[List[int], List[int]]:
-        """Computes the list of current and inherited control dependencies for the current event."""
-        control_deps = []
-        for entry in self.control_stack:
-            eid = entry['id']
-            truth = entry.get('truth')
-            if truth is True:
-                control_deps.append(eid)
-            elif truth is False:
-                control_deps.append(-eid)
-            else:
-                control_deps.append(eid)
+    # def _compute_control_dependencies(self) -> Tuple[List[int], List[int]]:
+    #     """Computes the list of current and inherited control dependencies for the current event."""
+    #     control_deps = []
+    #     for entry in self.control_stack:
+    #         eid = entry['id']
+    #         truth = entry.get('truth')
+    #         if truth is True:
+    #             control_deps.append(eid)
+    #         elif truth is False:
+    #             control_deps.append(-eid)
+    #         else:
+    #             control_deps.append(eid)
 
-        inherited_ids = []
-        if self.inherited_control_stack:
-            for e in self.inherited_control_stack[-1]:
-                tid = e.get('id')
-                ttruth = e.get('truth')
-                if ttruth is True:
-                    inherited_ids.append(tid)
-                elif ttruth is False:
-                    inherited_ids.append(-tid)
-                else:
-                    inherited_ids.append(tid)
+        # inherited_ids = []
+        # if self.inherited_control_stack:
+        #     for e in self.inherited_control_stack[-1]:
+        #         tid = e.get('id')
+        #         ttruth = e.get('truth')
+        #         if ttruth is True:
+        #             inherited_ids.append(tid)
+        #         elif ttruth is False:
+        #             inherited_ids.append(-tid)
+        #         else:
+        #             inherited_ids.append(tid)
 
-        return control_deps, inherited_ids
+        # return control_deps, inherited_ids
 
 
-    def _handle_control_header_line(self, frame: FrameType, match: Match[str], vars_defined: List[str], vars_used: List[str],
-                                    control_deps: List[int], inherited_ids: List[int], stripped_no_comments: str, indent: int) -> None:
-        """Handles a line that starts a control flow block, evaluating its condition and updating the control stack."""
-        keyword = match.group(1)
-        current_event_id = self.event_id
+    # def _handle_control_header_line(self, frame: FrameType, match: Match[str], vars_defined: List[str], vars_used: List[str],
+    #                                 control_deps: List[int], inherited_ids: List[int], stripped_no_comments: str, indent: int) -> None:
+    #     """Handles a line that starts a control flow block, evaluating its condition and updating the control stack."""
+    #     keyword = match.group(1)
+    #     current_event_id = self.event_id
 
-        # Determine truth value (same logic)
-        truth_value = None
-        try:
-            if keyword in ('if', 'elif', 'while'):
-                cond_m = re.match(r'^(?:if|elif|while)\s+(.*):\s*$', stripped_no_comments)
-                if cond_m:
-                    cond_text = cond_m.group(1)
-                    try:
-                        cond_eval = eval(compile(cond_text, '<cond>', 'eval'),
-                                        frame.f_globals, frame.f_locals)
-                        truth_value = bool(cond_eval)
-                    except Exception:
-                        truth_value = False
-                else:
-                    truth_value = False
-            elif keyword == 'for':
-                for_m = re.match(r'^for\s+.*\s+in\s+(.*):\s*$', stripped_no_comments)
-                if for_m:
-                    iterable_text = for_m.group(1)
-                    try:
-                        iterable_val = eval(compile(iterable_text, '<iter>', 'eval'),
-                                            frame.f_globals, frame.f_locals)
-                        truth_value = bool(iterable_val)
-                    except Exception:
-                        truth_value = False
-                else:
-                    truth_value = False
-            elif keyword == 'with':
-                truth_value = True
-        except Exception:
-            truth_value = False
+    #     # Determine truth value (same logic)
+    #     truth_value = None
+    #     try:
+    #         if keyword in ('if', 'elif', 'while'):
+    #             cond_m = re.match(r'^(?:if|elif|while)\s+(.*):\s*$', stripped_no_comments)
+    #             if cond_m:
+    #                 cond_text = cond_m.group(1)
+    #                 try:
+    #                     cond_eval = eval(compile(cond_text, '<cond>', 'eval'),
+    #                                     frame.f_globals, frame.f_locals)
+    #                     truth_value = bool(cond_eval)
+    #                 except Exception:
+    #                     truth_value = False
+    #             else:
+    #                 truth_value = False
+    #         elif keyword == 'for':
+    #             for_m = re.match(r'^for\s+.*\s+in\s+(.*):\s*$', stripped_no_comments)
+    #             if for_m:
+    #                 iterable_text = for_m.group(1)
+    #                 try:
+    #                     iterable_val = eval(compile(iterable_text, '<iter>', 'eval'),
+    #                                         frame.f_globals, frame.f_locals)
+    #                     truth_value = bool(iterable_val)
+    #                 except Exception:
+    #                     truth_value = False
+    #             else:
+    #                 truth_value = False
+    #         elif keyword == 'with':
+    #             truth_value = True
+    #     except Exception:
+    #         truth_value = False
 
-        seen_variables = self._get_current_seen_variables()
-        self._add_trace_entry(
-            'Line',
-            frame,
-            vars_defined=vars_defined,
-            vars_used=vars_used,
-            control_dependencies=control_deps,
-            inherited_control_dependencies=inherited_ids,
-            seen_variables=seen_variables
-        )
-        # --- DELETED: No longer need to add to pending events. ---
-        # self._pending_line_events[frame] = self.trace_data[-1]
+    #     seen_variables = self._get_current_seen_variables()
+    #     self._add_trace_entry(
+    #         'Line',
+    #         frame,
+    #         vars_defined=vars_defined,
+    #         vars_used=vars_used,
+    #         control_dependencies=control_deps,
+    #         inherited_control_dependencies=inherited_ids,
+    #         seen_variables=seen_variables
+    #     )
+    #     # --- DELETED: No longer need to add to pending events. ---
+    #     # self._pending_line_events[frame] = self.trace_data[-1]
 
-        if vars_defined:
-            self._update_last_definitions(vars_defined)
+    #     if vars_defined:
+    #         self._update_last_definitions(vars_defined)
 
-        self.control_stack.append({
-            'indent': indent,
-            'id': current_event_id,
-            'truth': truth_value
-        })
+    #     self.control_stack.append({
+    #         'indent': indent,
+    #         'id': current_event_id,
+    #         'truth': truth_value
+    #     })
 
 
     def _handle_regular_line(self, frame: FrameType, vars_defined: List[str], vars_used: List[str], control_deps: List[int], inherited_ids: List[int]) -> None:
