@@ -77,13 +77,6 @@ class ExecutionTracer:
     def _line_indent(self, source_line: str) -> int:
         """Count leading spaces to detect block level."""
         return len(source_line) - len(source_line.lstrip(' '))
-
-    def _is_control_keyword(self, line: str) -> bool:
-        """Check if the stripped line starts with a control keyword."""
-        keywords = (
-            'if', 'elif', 'else', 'for', 'while'
-        )
-        return line.strip().startswith(keywords)
     
     def _should_ignore(self, filename: str)->bool:
         """Check if the call is from a standard library or test framework"""
