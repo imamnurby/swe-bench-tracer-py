@@ -44,35 +44,35 @@ class ExecutionTracer:
             print("Failed to save trace to {}: {}".format(self.output_file, e), file=sys.stderr, flush=True)
         return False
     
-    def _get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
-        """Return separate lists of variables defined and used in the statement."""
-        defined, used = set(), set()
-        if not source_line or not source_line.strip():
-            return [], []
+    # def _get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
+    #     """Return separate lists of variables defined and used in the statement."""
+    #     defined, used = set(), set()
+    #     if not source_line or not source_line.strip():
+    #         return [], []
 
-        code_no_comments = self._strip_comments_preserving_strings(source_line).rstrip()
-        stripped = code_no_comments.strip()
-        if not stripped:
-            return [], []
+    #     code_no_comments = self._strip_comments_preserving_strings(source_line).rstrip()
+    #     stripped = code_no_comments.strip()
+    #     if not stripped:
+    #         return [], []
 
-        code_to_parse = stripped
-        # If the logical code (without comments) ends with a colon, make it parseable
-        if stripped.endswith(':'):
-            code_to_parse += "\n    pass"
+    #     code_to_parse = stripped
+    #     # If the logical code (without comments) ends with a colon, make it parseable
+    #     if stripped.endswith(':'):
+    #         code_to_parse += "\n    pass"
 
-        try:
-            tree = ast.parse(code_to_parse, mode="exec")
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Name):
-                    if isinstance(node.ctx, ast.Store):
-                        defined.add(node.id)
-                    elif isinstance(node.ctx, ast.Load):
-                        used.add(node.id)
-        except SyntaxError:
-            # best-effort only
-            pass
+    #     try:
+    #         tree = ast.parse(code_to_parse, mode="exec")
+    #         for node in ast.walk(tree):
+    #             if isinstance(node, ast.Name):
+    #                 if isinstance(node.ctx, ast.Store):
+    #                     defined.add(node.id)
+    #                 elif isinstance(node.ctx, ast.Load):
+    #                     used.add(node.id)
+    #     except SyntaxError:
+    #         # best-effort only
+    #         pass
 
-        return list(defined), list(used)
+    #     return list(defined), list(used)
 
     def _line_indent(self, source_line: str) -> int:
         """Count leading spaces to detect block level."""
@@ -506,8 +506,9 @@ class ExecutionTracer:
         if self.call_stack:
             self.call_stack.pop()
             source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
-            _, vars_used = self._get_vars_defined_and_used(source_line)
-
+            # _, vars_used = self._get_vars_defined_and_used(source_line)
+            _, vars_used = [], []
+            
             if self.function_variables_stack:
                 self.function_variables_stack.pop()
             if self.inherited_control_stack:
@@ -534,7 +535,8 @@ class ExecutionTracer:
         if stripped.startswith('try:'):
             return self._trace_function
 
-        vars_defined, vars_used = self._get_vars_defined_and_used(source_line)
+        # vars_defined, vars_used = self._get_vars_defined_and_used(source_line)
+        vars_defined, vars_used = [], []
         is_elif_else = stripped.startswith(('elif', 'else', 'except', 'finally'))
 
         # Manage control stack indentation rules
@@ -555,8 +557,9 @@ class ExecutionTracer:
         if self.call_stack:
             exc_type, exc_value, exc_tb = arg
             source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
-            _, vars_used = self._get_vars_defined_and_used(source_line)
-
+            # _, vars_used = self._get_vars_defined_and_used(source_line)
+            _, vars_used = [], []
+            
             self._add_trace_entry(
                 'Exception',
                 frame,
