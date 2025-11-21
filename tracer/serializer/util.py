@@ -52,7 +52,7 @@ exception_guard = partial(_exception_guard, max_depth=200)
 
 def inherits_numpy(cls):
     return any(
-        _cls.__module__.startswith('numpy')
+        _cls.__module__ and _cls.__module__.startswith('numpy')
         for _cls in cls.__mro__
     )
 
