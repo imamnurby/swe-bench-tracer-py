@@ -64,10 +64,14 @@ UNPICKLER._restore_function = unpickler_restore_function_monkey_patch(UNPICKLER)
 @isolate_parameters
 @exception_guard
 def serialize(x):
-    if x == float('inf') or x == float('-inf'):
-        return str(x)
-    
     if isinstance(x, PRIMITIVES):
+        if isinstance(x, float):
+            if any([
+                x != x,  # NaN
+                x == float('inf'),
+                x == float('-inf'),
+            ]):
+                return str(x)
         return x
     
     if isinstance(x, tuple(REGISTERED_EXT_TYPES)):
