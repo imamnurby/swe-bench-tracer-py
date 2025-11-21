@@ -15,7 +15,7 @@ from tracer.serializer import serialize, dump
 __all__ = ['ExecutionTracer']
 
 @lru_cache(maxsize=8192)
-def _should_ignore(filename: str, whitelist: list[str])->bool:
+def _should_ignore(filename: str, *whitelist) -> bool:
     """Check if the call is from a standard library or test framework"""
     if not filename:
         return False
@@ -261,7 +261,7 @@ class ExecutionTracer:
         if event == 'call' and frame.f_locals.get('self') is self:
             return None
 
-        if _should_ignore(frame.f_code.co_filename, self.include_stdlib):
+        if _should_ignore(frame.f_code.co_filename, *self.include_stdlib):
             return self._trace_function
         
         if event == 'call':
