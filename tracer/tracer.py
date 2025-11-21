@@ -44,35 +44,35 @@ class ExecutionTracer:
             print("Failed to save trace to {}: {}".format(self.output_file, e), file=sys.stderr, flush=True)
         return False
     
-    # def _get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
-    #     """Return separate lists of variables defined and used in the statement."""
-    #     defined, used = set(), set()
-    #     if not source_line or not source_line.strip():
-    #         return [], []
+    def _get_vars_defined_and_used(self, source_line: str) -> Tuple[List[str], List[str]]:
+        """Return separate lists of variables defined and used in the statement."""
+        defined, used = set(), set()
+        if not source_line or not source_line.strip():
+            return [], []
 
-    #     code_no_comments = self._strip_comments_preserving_strings(source_line).rstrip()
-    #     stripped = code_no_comments.strip()
-    #     if not stripped:
-    #         return [], []
+        code_no_comments = self._strip_comments_preserving_strings(source_line).rstrip()
+        stripped = code_no_comments.strip()
+        if not stripped:
+            return [], []
 
-    #     code_to_parse = stripped
-    #     # If the logical code (without comments) ends with a colon, make it parseable
-    #     if stripped.endswith(':'):
-    #         code_to_parse += "\n    pass"
+        code_to_parse = stripped
+        # If the logical code (without comments) ends with a colon, make it parseable
+        if stripped.endswith(':'):
+            code_to_parse += "\n    pass"
 
-    #     try:
-    #         tree = ast.parse(code_to_parse, mode="exec")
-    #         for node in ast.walk(tree):
-    #             if isinstance(node, ast.Name):
-    #                 if isinstance(node.ctx, ast.Store):
-    #                     defined.add(node.id)
-    #                 elif isinstance(node.ctx, ast.Load):
-    #                     used.add(node.id)
-    #     except SyntaxError:
-    #         # best-effort only
-    #         pass
+        try:
+            tree = ast.parse(code_to_parse, mode="exec")
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Name):
+                    if isinstance(node.ctx, ast.Store):
+                        defined.add(node.id)
+                    elif isinstance(node.ctx, ast.Load):
+                        used.add(node.id)
+        except SyntaxError:
+            # best-effort only
+            pass
 
-    #     return list(defined), list(used)
+        return list(defined), list(used)
 
     def _line_indent(self, source_line: str) -> int:
         """Count leading spaces to detect block level."""
@@ -146,62 +146,62 @@ class ExecutionTracer:
         except Exception:
             return line.split('#', 1)[0]
 
-    def _get_call_arg_varnames_from_call_line(self, source_line: str, callee_func_name: str)->Tuple[List, Dict]:
-        """
-        Parse a single source line and, if it contains a call to `callee_func_name`,
-        return a tuple (positional_arg_varlists, keyword_arg_varmap).
+    # def _get_call_arg_varnames_from_call_line(self, source_line: str, callee_func_name: str)->Tuple[List, Dict]:
+    #     """
+    #     Parse a single source line and, if it contains a call to `callee_func_name`,
+    #     return a tuple (positional_arg_varlists, keyword_arg_varmap).
 
-        - positional_arg_varlists: list where each element is a list of variable
-          names used in the corresponding positional argument expression.
-        - keyword_arg_varmap: dict mapping keyword-name -> list(variable-names).
-          If a `**kwargs` expansion is present it will be returned under the
-          special key '__KW_EXPANSION__'.
+    #     - positional_arg_varlists: list where each element is a list of variable
+    #       names used in the corresponding positional argument expression.
+    #     - keyword_arg_varmap: dict mapping keyword-name -> list(variable-names).
+    #       If a `**kwargs` expansion is present it will be returned under the
+    #       special key '__KW_EXPANSION__'.
 
-        Best-effort: returns ([], {}) on parse errors or no match.
-        """
-        code_no_comments = self._strip_comments_preserving_strings(source_line)
-        try:
-            tree = ast.parse(code_no_comments, mode='exec')
-        except SyntaxError:
-            return [], {}
+    #     Best-effort: returns ([], {}) on parse errors or no match.
+    #     """
+    #     code_no_comments = self._strip_comments_preserving_strings(source_line)
+    #     try:
+    #         tree = ast.parse(code_no_comments, mode='exec')
+    #     except SyntaxError:
+    #         return [], {}
 
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                func = node.func
-                match = False
-                if isinstance(func, ast.Name) and func.id == callee_func_name:
-                    match = True
-                elif isinstance(func, ast.Attribute) and func.attr == callee_func_name:
-                    match = True
+    #     for node in ast.walk(tree):
+    #         if isinstance(node, ast.Call):
+    #             func = node.func
+    #             match = False
+    #             if isinstance(func, ast.Name) and func.id == callee_func_name:
+    #                 match = True
+    #             elif isinstance(func, ast.Attribute) and func.attr == callee_func_name:
+    #                 match = True
 
-                if not match:
-                    continue
+    #             if not match:
+    #                 continue
 
-                pos_arg_varlists = []
-                for arg in node.args:
-                    sub = arg.value if isinstance(arg, ast.Starred) else arg
-                    varnames = set()
-                    for n in ast.walk(sub):
-                        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
-                            varnames.add(n.id)
-                    pos_arg_varlists.append(list(varnames))
+    #             pos_arg_varlists = []
+    #             for arg in node.args:
+    #                 sub = arg.value if isinstance(arg, ast.Starred) else arg
+    #                 varnames = set()
+    #                 for n in ast.walk(sub):
+    #                     if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
+    #                         varnames.add(n.id)
+    #                 pos_arg_varlists.append(list(varnames))
 
-                kw_arg_map = {}
-                for kw in node.keywords:
-                    key = kw.arg  # None indicates a **kwargs expansion
-                    val = kw.value
-                    varnames = set()
-                    for n in ast.walk(val):
-                        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
-                            varnames.add(n.id)
-                    if key is None:
-                        kw_arg_map['__KW_EXPANSION__'] = list(varnames)
-                    else:
-                        kw_arg_map[key] = list(varnames)
+    #             kw_arg_map = {}
+    #             for kw in node.keywords:
+    #                 key = kw.arg  # None indicates a **kwargs expansion
+    #                 val = kw.value
+    #                 varnames = set()
+    #                 for n in ast.walk(val):
+    #                     if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
+    #                         varnames.add(n.id)
+    #                 if key is None:
+    #                     kw_arg_map['__KW_EXPANSION__'] = list(varnames)
+    #                 else:
+    #                     kw_arg_map[key] = list(varnames)
 
-                return pos_arg_varlists, kw_arg_map
+    #             return pos_arg_varlists, kw_arg_map
 
-        return [], {}
+    #     return [], {}
     
     def _get_function_parameters(self, frame: FrameType) -> Dict[str, Any]:
         """Extract function parameters and their values"""
@@ -337,8 +337,9 @@ class ExecutionTracer:
     
     def _handle_call_event(self, frame: FrameType, func_info: Dict[str, Any]) -> None:
         """Handles a 'call' event by managing stacks, computing parameter sources, and recording function entry."""
-        caller_snapshot = self._snapshot_caller_context()
-        self._prepare_call_stacks()
+        # caller_snapshot = self._snapshot_caller_context()
+        caller_snapshot = []
+        # self._prepare_call_stacks()
         parameters = self._get_function_parameters(frame)
         func_vars = dict(parameters)
         self.function_variables_stack.append(func_vars)
@@ -349,22 +350,22 @@ class ExecutionTracer:
         self._record_function_entry(frame, func_info, parameters, parameter_sources, caller_snapshot)
 
 
-    def _snapshot_caller_context(self) -> List[Dict[str, Any]]:
-        """Creates a snapshot of the current and inherited control stacks for the calling context."""
-        caller_snapshot = [dict(e) for e in self.control_stack]
-        if self.inherited_control_stack:
-            caller_snapshot.extend([dict(e) for e in self.inherited_control_stack[-1]])
-        self.inherited_control_stack.append(caller_snapshot)
-        return caller_snapshot
+    # def _snapshot_caller_context(self) -> List[Dict[str, Any]]:
+    #     """Creates a snapshot of the current and inherited control stacks for the calling context."""
+    #     caller_snapshot = [dict(e) for e in self.control_stack]
+    #     if self.inherited_control_stack:
+    #         caller_snapshot.extend([dict(e) for e in self.inherited_control_stack[-1]])
+    #     self.inherited_control_stack.append(caller_snapshot)
+    #     return caller_snapshot
 
 
-    def _prepare_call_stacks(self) -> None:
-        """Prepares the control and call stacks for a new function call and updates max depth."""
-        self.control_stack_stack.append(self.control_stack)
-        self.control_stack = []
+    # def _prepare_call_stacks(self) -> None:
+    #     """Prepares the control and call stacks for a new function call and updates max depth."""
+    #     self.control_stack_stack.append(self.control_stack)
+    #     self.control_stack = []
 
-        current_depth = len(self.call_stack)
-        self.max_depth = max(self.max_depth, current_depth)
+    #     current_depth = len(self.call_stack)
+    #     self.max_depth = max(self.max_depth, current_depth)
 
 
     # def _compute_parameter_sources(self, frame: FrameType, func_info: Dict[str, Any]) -> Dict[str, Optional[List[Dict[str, Any]]]]:
@@ -500,8 +501,8 @@ class ExecutionTracer:
         if self.call_stack:
             self.call_stack.pop()
             source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
-            # _, vars_used = self._get_vars_defined_and_used(source_line)
-            _, vars_used = [], []
+            _, vars_used = self._get_vars_defined_and_used(source_line)
+            # _, vars_used = [], []
             
             if self.function_variables_stack:
                 self.function_variables_stack.pop()
@@ -526,12 +527,12 @@ class ExecutionTracer:
         self._update_function_variables(frame)
 
         filename, line_no, source_line, stripped, stripped_no_comments, indent = self._compute_line_metadata(frame)
-        if stripped.startswith('try:'):
-            return self._trace_function
+        # if stripped.startswith('try:'):
+        #     return self._trace_function
 
-        # vars_defined, vars_used = self._get_vars_defined_and_used(source_line)
-        vars_defined, vars_used = [], []
-        is_elif_else = stripped.startswith(('elif', 'else', 'except', 'finally'))
+        vars_defined, vars_used = self._get_vars_defined_and_used(source_line)
+        # vars_defined, vars_used = [], []
+        # is_elif_else = stripped.startswith(('elif', 'else', 'except', 'finally'))
 
         # Manage control stack indentation rules
         # self._update_control_stack_for_indent(indent, is_elif_else)
@@ -553,8 +554,8 @@ class ExecutionTracer:
         if self.call_stack:
             exc_type, exc_value, exc_tb = arg
             source_line = self._get_source_line(frame.f_code.co_filename, frame.f_lineno)
-            # _, vars_used = self._get_vars_defined_and_used(source_line)
-            _, vars_used = [], []
+            _, vars_used = self._get_vars_defined_and_used(source_line)
+            # _, vars_used = [], []
             
             self._add_trace_entry(
                 'Exception',
