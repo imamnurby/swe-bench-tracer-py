@@ -292,7 +292,7 @@ class ExecutionTracer:
     def _get_current_seen_variables(self) -> Dict[str, Any]:
         """Get a copy of the current function's seen variables"""
         if self.function_variables_stack:
-            return dict(copy.deepcopy(self.function_variables_stack[-1]))
+            return dict(self.function_variables_stack[-1])
         return {}
     
     def _add_trace_entry(self, event_type: str, frame: FrameType, **kwargs)->None:
