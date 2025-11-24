@@ -102,7 +102,12 @@ def _get_vars_defined_and_used(source_line: str) -> Tuple[List[str], List[str]]:
     return list(defined), list(used)
 
 class ExecutionTracer:
-    def __init__(self, output_file: str = "trace.jsonl", include_stdlib: Optional[Set[str]] = None):
+    def __init__(
+        self,
+        output_file: str = "trace.jsonl",
+        include_stdlib: Optional[Set[str]] = None,
+        functions_file: Optional[str] = None,
+    ):
         self.call_stack = []
         self.call_graph = defaultdict(set)
         self.call_counts = defaultdict(int)
@@ -117,6 +122,24 @@ class ExecutionTracer:
         self.last_def_event = defaultdict(dict)
         self.function_variables_stack = []
         self.include_stdlib = list(include_stdlib) if include_stdlib else []
+
+        self.allowed_functions: Optional[Set[str]] = None
+        if functions_file is not None:
+            self.allowed_functions = set()
+            try:
+                with open(functions_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        name = line.strip()
+                        if not name:
+                            continue
+                        self.allowed_functions.add(name)
+            except (OSError, IOError) as e:
+                print(
+                    f"Warning: could not read functions_file {functions_file}: {e}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                self.allowed_functions = None
         
     def __enter__(self):
         self.start_tracing()
@@ -129,6 +152,27 @@ class ExecutionTracer:
         except Exception as e:
             print("Failed to save trace to {}: {}".format(self.output_file, e), file=sys.stderr, flush=True)
         return False
+
+    def _is_function_allowed(
+        self,
+        frame: FrameType,
+        func_info: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Return True if this function should be traced, according to
+        the functions file (if any). If no functions file is configured,
+        trace everything (return True).
+        """
+        # No whitelist => trace everything
+        if self.allowed_functions is None:
+            return True
+
+        # We have a whitelist; check against qualified_name
+        if func_info is None:
+            func_info = self._get_function_info(frame)
+
+        qualified_name = func_info["qualified_name"]
+        return qualified_name in self.allowed_functions
 
     def _get_source_line(self, filename: str, line_no: int) -> str:
         """Get the source code line from a file"""
@@ -263,9 +307,14 @@ class ExecutionTracer:
 
         if _should_ignore(frame.f_code.co_filename, *self.include_stdlib):
             return self._trace_function
-        
+
+        func_info = None
         if event == 'call':
             func_info = self._get_function_info(frame)
+
+        if not self._is_function_allowed(frame, func_info):
+            return self._trace_function
+        if event == 'call':
             self._handle_call_event(frame, func_info)
         elif event == 'return':
             self._handle_return_event(frame, arg)
