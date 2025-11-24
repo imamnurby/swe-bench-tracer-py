@@ -253,6 +253,17 @@ FAIL_TO_PASS_TESTS = {
     ]
 }
 
+def _get_allowed_functions():
+    value = os.getenv("TRACER_ALLOWED_FUNCTIONS", "")
+    if not value:
+        return set()
+    assert isinstance(value, str)
+    if value.strip().lower() == 'none':
+        return set()
+    return set(s.strip() for s in value.split(',') if s.strip())
+
+ALLOWED_FUNCTIONS = _get_allowed_functions()
+
 def _looks_like_sympy_test(frame):
     co = frame.f_code
     if not co.co_name.startswith("test_"):
@@ -278,7 +289,11 @@ def _profile_tracer(frame, event, arg):
             if tid:
                 _state.active = True
                 _state.tid = tid
-                _state.tracer = ExecutionTracer(os.path.join(os.environ.get('TRACER_OUTPUT_DIR'), "{}.jsonl".format(tid)))
+                _state.tracer = ExecutionTracer(
+                    output_file=os.path.join(os.environ.get('TRACER_OUTPUT_DIR'), "{}.jsonl".format(tid)),
+                    include_stdlib=None,
+                    allowed_functions=ALLOWED_FUNCTIONS,
+                )
                 st.append("root")
                 _state.tracer.start_tracing()
                 _state.tracer._handle_call_event(frame, _state.tracer._get_function_info(frame))
@@ -350,7 +365,10 @@ def _profile_tracker(frame, event, arg):
             if tid:
                 _state.active = True
                 _state.tid = tid
-                _state.tracer = Tracker(os.path.join(os.environ.get('TRACER_OUTPUT_DIR'), "{}.jsonl".format(tid)))
+                _state.tracer = Tracker(
+                    output_file=os.path.join(os.environ.get('TRACER_OUTPUT_DIR'), "{}.jsonl".format(tid)),
+                    include_stdlib=None,
+                )
                 st.append("root")
                 _state.tracer.start_tracing()
                 _state.tracer._handle_call_event(frame, _state.tracer._get_function_info(frame))
