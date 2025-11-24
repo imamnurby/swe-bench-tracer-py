@@ -1,5 +1,6 @@
 import sys
 import inspect
+import threading
 
 from types import CodeType, FrameType
 
@@ -14,9 +15,29 @@ def get_members_static(obj, predicate=None):
             out.append((name, attr))
     return out
 
+class ThreadSafeCache:
+    def __init__(self, max_size):
+        self._cache = {}
+        self._lock = threading.Lock()
+        self._max_size = max_size
+    
+    def get_or_set(self, key, factory):
+        with self._lock:
+            if key not in self._cache:
+                if len(self._cache) >= self._max_size:
+                    self._cache.clear()
+                self._cache[key] = factory()
+            return self._cache[key]
+
+QUALNAME_CACHE = ThreadSafeCache(max_size=131072)
+
 def get_func_qualname(frame: FrameType) -> str:
     if sys.version_info >= (3, 11):
         return frame.f_code.co_qualname
+    key = (frame.f_code.co_filename, frame.f_code.co_name, frame.f_code.co_firstlineno)
+    return QUALNAME_CACHE.get_or_set(key, lambda: _get_func_qualname(frame))
+
+def _get_func_qualname(frame: FrameType) -> str:
     for val in frame.f_globals.values():
         # function is global in the module
         if inspect.isfunction(val) and val.__code__ is frame.f_code:
