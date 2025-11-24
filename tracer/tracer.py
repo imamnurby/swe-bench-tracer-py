@@ -106,7 +106,7 @@ class ExecutionTracer:
         self,
         output_file: str = "trace.jsonl",
         include_stdlib: Optional[Set[str]] = None,
-        functions_file: Optional[str] = None,
+        allowed_functions: Optional[List[str]] = None,
     ):
         self.call_stack = []
         self.call_graph = defaultdict(set)
@@ -122,24 +122,7 @@ class ExecutionTracer:
         self.last_def_event = defaultdict(dict)
         self.function_variables_stack = []
         self.include_stdlib = list(include_stdlib) if include_stdlib else []
-
-        self.allowed_functions: Optional[Set[str]] = None
-        if functions_file is not None:
-            self.allowed_functions = set()
-            try:
-                with open(functions_file, "r", encoding="utf-8") as f:
-                    for line in f:
-                        name = line.strip()
-                        if not name:
-                            continue
-                        self.allowed_functions.add(name)
-            except (OSError, IOError) as e:
-                print(
-                    f"Warning: could not read functions_file {functions_file}: {e}",
-                    file=sys.stderr,
-                    flush=True,
-                )
-                self.allowed_functions = None
+        self.allowed_functions = allowed_functions or []
         
     def __enter__(self):
         self.start_tracing()
@@ -160,7 +143,7 @@ class ExecutionTracer:
         trace everything (return True).
         """
         # No whitelist => trace everything
-        if self.allowed_functions is None:
+        if not self.allowed_functions:
             return True
 
         # We have a whitelist; check against qualified_name
