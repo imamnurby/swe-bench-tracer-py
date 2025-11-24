@@ -6,7 +6,7 @@ import inspect
 
 from functools import lru_cache
 from collections import defaultdict
-from typing import Any, Dict, List, Tuple, Optional, Callable, Set, Iterable
+from typing import Any, Dict, List, Tuple, Optional, Callable, Set
 from types import FrameType
 from pathlib import Path
 from tracer.util import get_func_qualname
@@ -153,11 +153,7 @@ class ExecutionTracer:
             print("Failed to save trace to {}: {}".format(self.output_file, e), file=sys.stderr, flush=True)
         return False
 
-    def _is_function_allowed(
-        self,
-        frame: FrameType,
-        func_info: Optional[Dict[str, Any]] = None
-    ) -> bool:
+    def _is_function_allowed(self, frame: FrameType) -> bool:
         """
         Return True if this function should be traced, according to
         the functions file (if any). If no functions file is configured,
@@ -168,10 +164,7 @@ class ExecutionTracer:
             return True
 
         # We have a whitelist; check against qualified_name
-        if func_info is None:
-            func_info = self._get_function_info(frame)
-
-        qualified_name = func_info["qualified_name"]
+        qualified_name = get_func_qualname(frame)
         return qualified_name in self.allowed_functions
 
     def _get_source_line(self, filename: str, line_no: int) -> str:
@@ -308,13 +301,11 @@ class ExecutionTracer:
         if _should_ignore(frame.f_code.co_filename, *self.include_stdlib):
             return self._trace_function
 
-        func_info = None
+        if not self._is_function_allowed(frame):
+            return self._trace_function
+        
         if event == 'call':
             func_info = self._get_function_info(frame)
-
-        if not self._is_function_allowed(frame, func_info):
-            return self._trace_function
-        if event == 'call':
             self._handle_call_event(frame, func_info)
         elif event == 'return':
             self._handle_return_event(frame, arg)
