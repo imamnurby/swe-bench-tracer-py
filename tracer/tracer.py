@@ -106,7 +106,7 @@ class ExecutionTracer:
         self,
         output_file: str = "trace.jsonl",
         include_stdlib: Optional[Set[str]] = None,
-        allowed_functions: Optional[List[str]] = None,
+        allowed_functions: Optional[Set[str]] = None,
     ):
         self.call_stack = []
         self.call_graph = defaultdict(set)
@@ -122,7 +122,7 @@ class ExecutionTracer:
         self.last_def_event = defaultdict(dict)
         self.function_variables_stack = []
         self.include_stdlib = list(include_stdlib) if include_stdlib else []
-        self.allowed_functions = allowed_functions or []
+        self.allowed_functions = list(allowed_functions) if allowed_functions else []
         
     def __enter__(self):
         self.start_tracing()
@@ -562,10 +562,8 @@ class Tracker:
             return self._trace_function
 
         if event == 'call':
-            info = self._get_function_info(frame)
-            qname = info['qualified_name']
-            # if qname in self.target_qualified_names:
-            self._record_stack_to_target(qname, frame)
+            func_info = self._get_function_info(frame)
+            self._handle_call_event(frame, func_info)
 
         return self._trace_function
 
@@ -578,7 +576,9 @@ class Tracker:
         sys.setprofile(None)
         
     def _handle_call_event(self, frame: FrameType, func_info: Dict[str, Any]) -> None:
-        pass
+        qname = func_info['qualified_name']
+        # if qname in self.target_qualified_names:
+        self._record_stack_to_target(qname, frame)
 
     def save_trace(self) -> None:
         """Persist the collected (target, stack) pairs to a JSONL file."""
