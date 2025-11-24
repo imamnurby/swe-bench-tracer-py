@@ -6,13 +6,13 @@ import inspect
 
 from functools import lru_cache
 from collections import defaultdict
-from typing import Any, Dict, List, Tuple, Optional, Callable, Set
+from typing import Any, Dict, List, Tuple, Optional, Callable, Set, Iterable
 from types import FrameType
 from pathlib import Path
 from tracer.util import get_func_qualname
 from tracer.serializer import serialize, dump
 
-__all__ = ['ExecutionTracer']
+__all__ = ['ExecutionTracer', 'Tracker']
 
 @lru_cache(maxsize=8192)
 def _should_ignore(filename: str, *whitelist) -> bool:
@@ -421,3 +421,155 @@ class ExecutionTracer:
                 json_line = dump(entry)
                 f.write(json_line + '\n')
         print("Trace saved to {}".format(self.output_file), file=sys.stderr, flush=True)
+
+class Tracker:
+    def __init__(
+        self,
+        output_file: str,
+        # target_qualified_names,
+        include_stdlib: Optional[Set[str]] = None,
+    ):
+        """
+        :param output_file: Path to JSONL file where stacks will be stored.
+        :param target_qualified_names: Iterable of qualified names to trace.
+               Each must match the format produced by _get_function_info()['qualified_name'].
+        :param include_stdlib: Optional set of path components to keep even if inside stdlib/site-packages.
+        """
+        self.output_file = output_file
+        # self.target_qualified_names: Set[str] = set(target_qualified_names)
+        self.include_stdlib = list(include_stdlib) if include_stdlib else []
+
+        # Each element is (target_qualified_name, stack_sig)
+        # where stack_sig is a tuple of (filename, qualified_name) pairs.
+        self.stack_samples: List[Tuple[str, Tuple[Tuple[str, str], ...]]] = []
+        self.stack_seen: Set[Tuple[str, Tuple[Tuple[str, str], ...]]] = set()
+
+    def __enter__(self):
+        self.start_tracing()
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        self.stop_tracing()
+        try:
+            self.save_trace()
+        except Exception as e:
+            print(f"Failed to save trace to {self.output_file}: {e}", file=sys.stderr, flush=True)
+        return False
+
+    def _get_function_info(self, frame: FrameType) -> Dict[str, Any]:
+        """
+        Extract (minimal) function information for a frame.
+        Returns:
+          {
+            'qualified_name': '<module>:<qualname>',
+            'filename': '/abs/path/to/file.py',
+            'func_name': 'foo',
+            'mod_name': 'mypkg.module',
+        }
+        """
+        func_name = frame.f_code.co_name
+        func_qualname = get_func_qualname(frame)
+        filename = frame.f_code.co_filename
+        module = inspect.getmodule(frame)
+
+        if module is None:
+            mod_name = Path(filename).stem
+        else:
+            mod_name = module.__name__
+            if mod_name == "__main__":
+                module_file = getattr(module, "__file__", None)
+                if module_file:
+                    mod_name = Path(module_file).stem
+                else:
+                    mod_name = Path(filename).stem
+
+        return {
+            'qualified_name': f'{mod_name}:{func_qualname}',
+            'filename': filename,
+            'func_name': func_name,
+            'mod_name': mod_name,
+        }
+
+    def _record_stack_to_target(self, target_qualified_name: str, frame: FrameType) -> None:
+        """
+        Record the current call stack when a target function is called.
+
+        Representation:
+          stack = [
+            (filename_root, qualified_name_root),
+            ...,
+            (filename_target, qualified_name_target)
+          ]
+        """
+        stack: List[Tuple[str, str]] = []
+        cur = frame
+        while cur is not None:
+            info = self._get_function_info(cur)
+            
+            if not _should_ignore(info['filename'], *self.include_stdlib):
+                stack.append((info['filename'], info['qualified_name']))
+            cur = cur.f_back
+
+        # Convert to root → leaf order
+        stack.reverse()
+        stack_sig = tuple(stack)
+
+        key = (target_qualified_name, stack_sig)
+
+        # Deduplicate (target, stack) pairs by exact structure
+        if key not in self.stack_seen:
+            self.stack_seen.add(key)
+            self.stack_samples.append(key)
+
+    def _trace_function(self, frame: FrameType, event: str, arg: Any) -> Optional[Callable]:
+        """
+        sys.settrace callback.
+
+        Behavior:
+          - Ignore tracer's own methods.
+          - Ignore frames from stdlib/site-packages unless whitelisted.
+          - On 'call' events, if the function's qualified_name is one of the
+            target_qualified_names, record the stack.
+        """
+        # Avoid tracing methods of this tracer instance
+        if event == 'call' and frame.f_locals.get('self') is self:
+            return None
+
+        if _should_ignore(frame.f_code.co_filename, *self.include_stdlib):
+            return self._trace_function
+
+        if event == 'call':
+            info = self._get_function_info(frame)
+            qname = info['qualified_name']
+            # if qname in self.target_qualified_names:
+            self._record_stack_to_target(qname, frame)
+
+        return self._trace_function
+
+    def start_tracing(self) -> None:
+        """Start global tracing."""
+        sys.settrace(self._trace_function)
+
+    def stop_tracing(self) -> None:
+        """Stop global tracing."""
+        sys.settrace(None)
+        
+    def _handle_call_event(self, frame: FrameType, func_info: Dict[str, Any]) -> None:
+        pass
+
+    def save_trace(self) -> None:
+        """Persist the collected (target, stack) pairs to a JSONL file."""
+        base_dir = os.path.dirname(self.output_file)
+        if base_dir:
+            os.makedirs(base_dir, exist_ok=True)
+
+        with open(self.output_file, 'w', encoding='utf-8') as f:
+            for target_qualified_name, stack_sig in self.stack_samples:
+                entry = {
+                    "target": target_qualified_name,
+                    "stack": stack_sig,
+                }
+                json_line = dump(entry)
+                f.write(json_line + '\n')
+
+        print(f"Trace saved to {self.output_file}", file=sys.stderr, flush=True)

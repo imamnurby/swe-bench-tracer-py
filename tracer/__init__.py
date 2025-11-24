@@ -1,4 +1,4 @@
-from .tracer import ExecutionTracer
+from .tracer import ExecutionTracer, Tracker
 from .inspector import ExpressionInspector
 
-__all__ = ['ExecutionTracer', 'ExpressionInspector']
+__all__ = ['ExecutionTracer', 'ExpressionInspector', "Tracker"]
