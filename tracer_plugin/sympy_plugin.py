@@ -2,7 +2,7 @@ import os
 import sys
 import threading
 
-from tracer import ExecutionTracer, ExpressionInspector
+from tracer import Tracker, ExecutionTracer, ExpressionInspector
 
 _state = threading.local()
 
@@ -337,6 +337,41 @@ def _profile_inspector(frame, event, arg):
             sys.exit(0)
         return
 
+def _profile_tracker(frame, event, arg):
+    st = getattr(_state, "stack", None)
+    if st is None:
+        _state.stack = st = []
+        _state.active = False
+        _state.tid = None
+        _state.tracer = None
+    if event == "call":
+        if not _state.active:
+            tid = _looks_like_sympy_test(frame)
+            if tid:
+                _state.active = True
+                _state.tid = tid
+                _state.tracer = Tracker(os.path.join(os.environ.get('TRACER_OUTPUT_DIR'), "{}.jsonl".format(tid)))
+                st.append("root")
+                _state.tracer.start_tracing()
+                _state.tracer._handle_call_event(frame, _state.tracer._get_function_info(frame))
+                frame.f_trace = _state.tracer._trace_function
+                return
+        if _state.active:
+            st.append("call")
+    elif event == "return" and _state.active:
+        if st:
+            st.pop()
+        if not st:
+            _state.tracer.stop_tracing()
+            try:
+                _state.tracer.save_trace()
+            except Exception as e:
+                print("Failed to save trace to {}: {}".format(_state.tracer.output_file, e), file=sys.stderr, flush=True)
+            _state.active = False
+            _state.tid = None
+            _state.tracer = None
+        return
+
 def _install_tracer():
     sys.setprofile(_profile_tracer)
     try:
@@ -351,12 +386,22 @@ def _install_inspector():
     except Exception:
         pass
 
+def _install_tracker():
+    sys.setprofile(_profile_tracker)
+    try:
+        threading.setprofile(_profile_tracker)
+    except Exception:
+        pass
+
 if __name__ == "__main__":
     enable_tracer = os.environ.get("ENABLE_TRACER", "0") == "1"
     enable_inspector = os.environ.get("ENABLE_INSPECTOR", "0") == "1"
-    if enable_inspector and enable_tracer:
-        raise RuntimeError("Cannot enable both tracer and inspector")
+    enable_tracker = os.environ.get("ENABLE_TRACKER", "0") == "1"
+    if enable_tracer + enable_inspector + enable_tracker > 1:
+        raise RuntimeError("Cannot enable more than one of tracer, inspector, and tracker")
     if enable_tracer:
         _install_tracer()
     elif enable_inspector:
         _install_inspector()
+    elif enable_tracker:
+        _install_tracker()

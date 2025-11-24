@@ -1,7 +1,7 @@
 import os
 import pytest
 
-from tracer import ExecutionTracer, ExpressionInspector
+from tracer import Tracker, ExecutionTracer, ExpressionInspector
 
 def validate_options(config):
     if config._disable:
@@ -26,6 +26,8 @@ def pytest_addoption(parser):
     group.addoption('--expr', default=None)
     group.addoption('--count', type=int, default=1)
     group.addoption('--inspector-mode', choices=['before', 'after'], default='before')
+    # Tracker-specific options
+    group.addoption('--use-tracker', action='store_true', default=False)
     # Optional options
     group.addoption('--test-name', default=None)
     group.addoption('--include-stdlib', default=None)
@@ -39,6 +41,7 @@ def pytest_configure(config):
     config._expr = config.getoption('--expr')
     config._count = config.getoption('--count')
     config._inspector_mode = config.getoption('--inspector-mode')
+    config._use_tracker = config.getoption('--use-tracker')
     config._test_name = config.getoption('--test-name')
     _inc = config.getoption('--include-stdlib')
     if _inc is None or _inc.strip().lower() == 'none':
@@ -53,8 +56,7 @@ def pytest_configure(config):
 def pytest_unconfigure(config):
     del config._mode, config._output, config._disable, config._bp_file
     del config._bp_line, config._expr, config._count, config._inspector_mode
-    if hasattr(config, "_include_stdlib"):
-        del config._include_stdlib
+    del config._use_tracker, config._test_name, config._include_stdlib
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_call(item):
@@ -68,9 +70,14 @@ def pytest_runtest_call(item):
         return
     output_file = os.path.join(config._output, "{}.jsonl".format(test_name))
     if config._mode == 'tracer':
-        with ExecutionTracer(output_file=output_file, include_stdlib=config._include_stdlib):
-            yield
-        return
+        if config._use_tracker:
+            with Tracker(output_file=output_file):
+                yield
+            return
+        else:
+            with ExecutionTracer(output_file=output_file, include_stdlib=config._include_stdlib):
+                yield
+            return
     if config._mode == 'inspector':
         with ExpressionInspector(
             config._bp_file,
