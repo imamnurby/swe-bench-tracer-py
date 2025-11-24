@@ -7,6 +7,21 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Set, Tuple
 
+"""
+Given:
+  1) A JSONL file produced by the tracer (each line: {"target": ..., "stack": ...}),
+  2) A unified diff patch file, and
+  3) A repository root,
+
+the script:
+
+  • Parses the patch to find which functions/classes (module:qualname) were modified
+    on the chosen side of the diff (old or new).
+  • Uses those modified qualnames as targets to filter the tracer JSONL.
+  • Computes the union of all function qualnames that appear in any stack for those targets.
+  • Writes the resulting sorted list of qualnames to a JSON file.
+"""
+
 
 def extract_modified_lines(patch_content: str) -> Dict[str, Dict[str, List[int]]]:
     """
@@ -338,7 +353,7 @@ def main():
     output_obj = sorted(list(global_union))
     with open(args.output_json, "w", encoding="utf-8") as f:
         json.dump(output_obj, f, indent=2, sort_keys=True)
-    print(f"\nJSON files written to {args.output_json}")
+    print(f"JSON files written to {args.output_json}")
 
 if __name__ == "__main__":
     main()
