@@ -351,9 +351,11 @@ def main():
         global_union.update(qname_set)
 
     output_obj = sorted(list(global_union))
+
     with open(args.output_json, "w", encoding="utf-8") as f:
-        json.dump(output_obj, f, indent=2, sort_keys=True)
-    print(f"JSON files written to {args.output_json}")
+        f.write("\n".join(map(str, output_obj)))
+
+    print(f"Text file written to {args.output_json}")
 
 if __name__ == "__main__":
     main()
