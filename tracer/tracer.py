@@ -147,8 +147,8 @@ class ExecutionTracer:
             return True
 
         # We have a whitelist; check against qualified_name
-        qualified_name = get_func_qualname(frame)
-        return qualified_name in self.allowed_functions
+        func_info = self._get_function_info(frame)
+        return func_info["qualified_name"] in self.allowed_functions
 
     def _get_source_line(self, filename: str, line_no: int) -> str:
         """Get the source code line from a file"""
