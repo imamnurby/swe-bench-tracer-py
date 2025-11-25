@@ -525,9 +525,8 @@ class Tracker:
         if not self.allowed_functions:
             return True
 
-        # We have a whitelist; check against qualified_name
-        qualified_name = get_func_qualname(frame)
-        return qualified_name in self.allowed_functions
+        func_info = self._get_function_info(frame)
+        return func_info["qualified_name"] in self.allowed_functions
 
     def _record_stack_to_target(self, target_qualified_name: str, frame: FrameType) -> None:
         """
@@ -592,8 +591,8 @@ class Tracker:
         sys.setprofile(None)
         
     def _handle_call_event(self, frame: FrameType, func_info: Dict[str, Any]) -> None:
-        qname = func_info['qualified_name']
-        if qname in self._is_function_allowed(frame):
+        if self._is_function_allowed(frame):
+            qname = func_info['qualified_name']
             self._record_stack_to_target(qname, frame)
 
     def save_trace(self) -> None:
