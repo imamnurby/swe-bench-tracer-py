@@ -1649,6 +1649,7 @@ def _profile_tracker(frame, event, arg):
                 _state.tracer = Tracker(
                     output_file=output_file,
                     include_stdlib={"unittest"},
+                    allowed_functions=ALLOWED_FUNCTIONS
                 )
                 st.append("root")
                 _state.tracer.start_tracing()

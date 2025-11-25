@@ -83,6 +83,7 @@ def pytest_runtest_call(item):
             with Tracker(
                 output_file=output_file,
                 include_stdlib=config._include_stdlib,
+                allowed_functions=config._allowed_functions,
             ):
                 yield
             return

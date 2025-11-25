@@ -368,6 +368,7 @@ def _profile_tracker(frame, event, arg):
                 _state.tracer = Tracker(
                     output_file=os.path.join(os.environ.get('TRACER_OUTPUT_DIR'), "{}.jsonl".format(tid)),
                     include_stdlib=None,
+                    allowed_functions=ALLOWED_FUNCTIONS,
                 )
                 st.append("root")
                 _state.tracer.start_tracing()
