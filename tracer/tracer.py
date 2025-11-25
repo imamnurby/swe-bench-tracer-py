@@ -584,11 +584,11 @@ class Tracker:
 
     def start_tracing(self) -> None:
         """Start global tracing."""
-        sys.setprofile(self._trace_function)
+        sys.settrace(self._trace_function)
 
     def stop_tracing(self) -> None:
         """Stop global tracing."""
-        sys.setprofile(None)
+        sys.settrace(None)
         
     def _handle_call_event(self, frame: FrameType, func_info: Dict[str, Any]) -> None:
         if self._is_function_allowed(frame):
