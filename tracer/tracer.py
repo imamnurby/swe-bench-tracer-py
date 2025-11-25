@@ -451,6 +451,7 @@ class Tracker:
         output_file: str,
         # target_qualified_names,
         include_stdlib: Optional[Set[str]] = None,
+        allowed_functions: Optional[Set[str]] = None,
     ):
         """
         :param output_file: Path to JSONL file where stacks will be stored.
@@ -460,6 +461,7 @@ class Tracker:
         """
         self.output_file = output_file
         # self.target_qualified_names: Set[str] = set(target_qualified_names)
+        self.allowed_functions = list(allowed_functions) if allowed_functions else []
         self.include_stdlib = list(include_stdlib) if include_stdlib else []
 
         # Each element is (target_qualified_name, stack_sig)
@@ -512,6 +514,20 @@ class Tracker:
             'func_name': func_name,
             'mod_name': mod_name,
         }
+
+    def _is_function_allowed(self, frame: FrameType) -> bool:
+        """
+        Return True if this function should be traced, according to
+        the functions file (if any). If no functions file is configured,
+        trace everything (return True).
+        """
+        # No whitelist => trace everything
+        if not self.allowed_functions:
+            return True
+
+        # We have a whitelist; check against qualified_name
+        qualified_name = get_func_qualname(frame)
+        return qualified_name in self.allowed_functions
 
     def _record_stack_to_target(self, target_qualified_name: str, frame: FrameType) -> None:
         """
@@ -577,8 +593,8 @@ class Tracker:
         
     def _handle_call_event(self, frame: FrameType, func_info: Dict[str, Any]) -> None:
         qname = func_info['qualified_name']
-        # if qname in self.target_qualified_names:
-        self._record_stack_to_target(qname, frame)
+        if qname in self._is_function_allowed(frame):
+            self._record_stack_to_target(qname, frame)
 
     def save_trace(self) -> None:
         """Persist the collected (target, stack) pairs to a JSONL file."""
