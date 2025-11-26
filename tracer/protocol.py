@@ -31,6 +31,13 @@ class Event(BaseModel):
         else:
             raise ValueError(f"Unknown event type: {event_type}")
 
+    def matches(self, other):
+        if not isinstance(other, Event):
+            return False
+        return (self.event_type == other.event_type and
+                self.statement == other.statement and
+                self.function_name == other.function_name)
+
     def dump(self):
         return self.model_dump(exclude={
             "event_id", "line_number", "excluded",
