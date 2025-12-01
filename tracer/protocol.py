@@ -34,6 +34,8 @@ class Event(BaseModel):
     def matches(self, other):
         if not isinstance(other, Event):
             return False
+        if isinstance(self, FunctionEvent) and isinstance(other, FunctionEvent):
+            return self.function_name == other.function_name
         return (self.event_type == other.event_type and
                 self.statement == other.statement and
                 self.function_name == other.function_name)
