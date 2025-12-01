@@ -207,7 +207,7 @@ class ExecutionTracer:
     def _get_function_info(self, frame: FrameType)->Dict[str, Any]:
         """Extract detailed function information"""
         func_name = frame.f_code.co_name
-        func_qualname = get_func_qualname(frame)
+        func_qualname = get_func_qualname(frame, self.source_cache)
         filename = frame.f_code.co_filename
         line_no = frame.f_lineno
         module = inspect.getmodule(frame)        
@@ -468,6 +468,7 @@ class Tracker:
         # where stack_sig is a tuple of (filename, qualified_name) pairs.
         self.stack_samples: List[Tuple[str, Tuple[Tuple[str, str], ...]]] = []
         self.stack_seen: Set[Tuple[str, Tuple[Tuple[str, str], ...]]] = set()
+        self.source_cache = {}
 
     def __enter__(self):
         self.start_tracing()
@@ -493,7 +494,7 @@ class Tracker:
         }
         """
         func_name = frame.f_code.co_name
-        func_qualname = get_func_qualname(frame)
+        func_qualname = get_func_qualname(frame, self.source_cache)
         filename = frame.f_code.co_filename
         module = inspect.getmodule(frame)
 

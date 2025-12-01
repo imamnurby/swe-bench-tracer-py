@@ -1,19 +1,8 @@
+import ast
 import sys
-import inspect
 import threading
 
-from types import CodeType, FrameType
-
-def get_members_static(obj, predicate=None):
-    out = []
-    for name in dir(obj):
-        try:
-            attr = inspect.getattr_static(obj, name)
-        except Exception:
-            continue
-        if predicate is None or predicate(attr):
-            out.append((name, attr))
-    return out
+from types import FrameType
 
 class ThreadSafeCache:
     def __init__(self, max_size):
@@ -29,35 +18,74 @@ class ThreadSafeCache:
                 self._cache[key] = factory()
             return self._cache[key]
 
+# Adopted from https://github.com/alexmojaki/executing/blob/master/executing/executing.py
+class QualnameVisitor(ast.NodeVisitor):
+    def __init__(self):
+        super(QualnameVisitor, self).__init__()
+        self.stack = []
+        self.qualnames = {}
+
+    def add_qualname(self, node, name=None):
+        name = name or node.name
+        self.stack.append(name)
+        if getattr(node, 'decorator_list', ()):
+            lineno = node.decorator_list[0].lineno
+        else:
+            lineno = node.lineno
+        self.qualnames.setdefault((name, lineno), ".".join(self.stack))
+
+    def visit_FunctionDef(self, node, name=None):
+        assert isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)), node
+        self.add_qualname(node, name)
+        self.stack.append('<locals>')
+        children = []
+        if isinstance(node, ast.Lambda):
+            children = [node.body]
+        else:
+            children = node.body
+        for child in children:
+            self.visit(child)
+        self.stack.pop()
+        self.stack.pop()
+
+        for field, child in ast.iter_fields(node):
+            if field == 'body':
+                continue
+            if isinstance(child, ast.AST):
+                self.visit(child)
+            elif isinstance(child, list):
+                for grandchild in child:
+                    if isinstance(grandchild, ast.AST):
+                        self.visit(grandchild)
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_Lambda(self, node):
+        assert isinstance(node, ast.Lambda)
+        self.visit_FunctionDef(node, '<lambda>')
+
+    def visit_ClassDef(self, node):
+        assert isinstance(node, ast.ClassDef)
+        self.add_qualname(node)
+        self.generic_visit(node)
+        self.stack.pop()
+
 QUALNAME_CACHE = ThreadSafeCache(max_size=131072)
 
-def get_func_qualname(frame: FrameType) -> str:
+def get_func_qualname(frame: FrameType, source_lines_cache: dict = {}) -> str:
     if sys.version_info >= (3, 11):
         return frame.f_code.co_qualname
-    key = (frame.f_code.co_filename, frame.f_code.co_name, frame.f_code.co_firstlineno)
-    return QUALNAME_CACHE.get_or_set(key, lambda: _get_func_qualname(frame))
+    key1 = frame.f_code.co_filename
+    key2 = (frame.f_code.co_name, frame.f_code.co_firstlineno)
+    qualnames = QUALNAME_CACHE.get_or_set(key1, lambda: _update_func_qualnames(key1, source_lines_cache))
+    return qualnames.get(key2, frame.f_code.co_name)
 
-def _get_func_qualname(frame: FrameType) -> str:
-    for val in frame.f_globals.values():
-        # function is global in the module
-        if inspect.isfunction(val) and val.__code__ is frame.f_code:
-            return val.__qualname__
-        # function is a method in a class in the module
-        if inspect.isclass(val):
-            # check all methods of the class
-            try:
-                from types import GenericAlias
-                if isinstance(val, GenericAlias):
-                    val = val.__origin__
-            except ImportError:
-                pass
-            for _, method in get_members_static(val, predicate=lambda x: inspect.isfunction(x) or inspect.ismethod(x)):
-                if hasattr(method, '__code__') and method.__code__ is frame.f_code:
-                    return method.__qualname__
-    # function is a nested function; we only support one level of nesting for now
-    for val in frame.f_globals.values():
-        if inspect.isfunction(val):
-            for const in val.__code__.co_consts:
-                if isinstance(const, CodeType) and const is frame.f_code:
-                    return "{}.<locals>.{}".format(val.__qualname__, frame.f_code.co_name)
-    return frame.f_code.co_name
+def _update_func_qualnames(filename: str, source_lines_cache: dict):
+    visitor = QualnameVisitor()
+    if filename not in source_lines_cache:
+        with open(filename, 'r', encoding='utf-8') as f:
+            source_lines_cache[filename] = f.readlines()
+    source = ''.join(source_lines_cache[filename])
+    tree = ast.parse(source, filename=filename)
+    visitor.visit(tree)
+    return visitor.qualnames
