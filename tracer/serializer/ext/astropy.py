@@ -137,6 +137,27 @@ class LexerHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class CompoundModelHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result =  {"py/object": canonical_class_name(obj)}
+        try:
+            result.update(
+                self.context.flatten({
+                    "op": obj.op,
+                    "left": obj.left,
+                    "right": obj.right,
+                    "param_names": obj.param_names,
+                    "n_inputs": obj.n_inputs,
+                    "n_outputs": obj.n_outputs,
+                })
+            )
+        except Exception:
+            pass
+        return result
+
+    def restore(self, obj):
+        return obj
+
 def try_import_astropy(mod_name: str, class_names: list, handler: BaseHandler, base=False):
     for class_name in class_names:
         try:
@@ -227,6 +248,12 @@ try_import_astropy(
     "astropy.extern.ply.lex",
     ["Lexer"],
     LexerHandler,
+)
+try_import_astropy(
+    "astropy.modeling.core",
+    ["CompoundModel"],
+    CompoundModelHandler,
+    base=True,
 )
 
 def register_handlers():
