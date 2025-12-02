@@ -75,6 +75,8 @@ QUALNAME_CACHE = ThreadSafeCache(max_size=131072)
 def get_func_qualname(frame: FrameType, source_lines_cache: dict = {}) -> str:
     if sys.version_info >= (3, 11):
         return frame.f_code.co_qualname
+    if frame.f_code.co_filename == '<string>':
+        return frame.f_code.co_name
     key1 = frame.f_code.co_filename
     key2 = (frame.f_code.co_name, frame.f_code.co_firstlineno)
     qualnames = QUALNAME_CACHE.get_or_set(key1, lambda: _update_func_qualnames(key1, source_lines_cache))
