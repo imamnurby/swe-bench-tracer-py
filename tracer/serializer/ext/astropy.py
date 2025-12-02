@@ -158,6 +158,13 @@ class CompoundModelHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class TestCaseHandler(BaseHandler):
+    def flatten(self, obj, data):
+        return {"py/object": canonical_class_name(obj)}
+
+    def restore(self, obj):
+        return obj
+
 def try_import_astropy(mod_name: str, class_names: list, handler: BaseHandler, base=False):
     for class_name in class_names:
         try:
@@ -253,6 +260,12 @@ try_import_astropy(
     "astropy.modeling.core",
     ["CompoundModel"],
     CompoundModelHandler,
+    base=True,
+)
+try_import_astropy(
+    "astropy.io.fits.tests.conftest",
+    ["FitsTestCase"],
+    TestCaseHandler,
     base=True,
 )
 
