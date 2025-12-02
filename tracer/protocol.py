@@ -11,8 +11,6 @@ class Event(BaseModel):
     filepath: str
     function_name: str
     excluded: bool = False
-    current_fn_block: Optional[Any] = None  # type: ignore
-    executed_fn_block: Optional[Any] = None  # type: ignore
     
     @staticmethod
     def from_dict(data):
@@ -43,7 +41,6 @@ class Event(BaseModel):
     def dump(self):
         return self.model_dump(exclude={
             "event_id", "line_number", "excluded",
-            "current_fn_block", "executed_fn_block",
         })
 
     def deserialized(self):
@@ -63,7 +60,6 @@ class FunctionEvent(Event):
         return self.model_dump(exclude={
             "event_id", "line_number", "excluded",
             "inherited_control_dependencies",
-            "current_fn_block", "executed_fn_block",
         })
 
 class ReturnEvent(Event):
@@ -75,10 +71,22 @@ class ReturnEvent(Event):
         self.return_value = deserialize(self.return_value)
         return self
 
+    def dump(self):
+        return self.model_dump(exclude={
+            "event_id", "line_number", "excluded",
+            "vars_used", "caller_name",
+        })
+
 class ExceptionEvent(Event):
     exception_type: str
     exception_value: str
     vars_used: Optional[List[str]] = None
+
+    def dump(self):
+        return self.model_dump(exclude={
+            "event_id", "line_number", "excluded",
+            "vars_used",
+        })
 
 class LineEvent(Event):
     vars_defined: List[str]
@@ -94,8 +102,8 @@ class LineEvent(Event):
     def dump(self):
         return self.model_dump(exclude={
             "event_id", "line_number", "excluded",
+            "vars_defined", "vars_used",
             "control_dependencies", "inherited_control_dependencies",
-            "current_fn_block", "executed_fn_block",
         })
 
 class InspectionException(BaseModel):
