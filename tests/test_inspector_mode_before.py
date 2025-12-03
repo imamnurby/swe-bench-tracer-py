@@ -186,6 +186,28 @@ def test_nested_call_in_return():
     result = Result(**inspector.result)
     assert_equals(result.value, 18)
 
+def test_func_returning_none_implicitly():
+    def func():
+        pass
+    with Inspector(FILE_PATH, 191, '__return__', mode='before') as inspector:
+        func()
+    result = Result(**inspector.result)
+    assert_equals(result.value, None)
+
+def test_func_with_exception_unhandled():
+    def func():
+        x = 10
+        y = 0
+        return x/y
+    with Inspector(FILE_PATH, 201, '__return__', mode='before') as inspector:
+        func()
+    result = Result(**inspector.result)
+    assert_equals(result.value, ['ZeroDivisionError', 'division by zero'])
+    with Inspector(FILE_PATH, 201, '__exception__', mode='before') as inspector:
+        func()
+    result = Result(**inspector.result)
+    assert_equals(result.value, ['ZeroDivisionError', 'division by zero'])
+
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
     for test_func in test_funcs:

@@ -66,7 +66,7 @@ class AfterExecution:
         def dispatch_line(dbg: 'ExpressionInspector', frame):
             if not dbg.break_here(frame):
                 return AfterExecution.Initialized
-            if dbg.source_line.startswith('return'):
+            if '__exception__' in dbg.expr or '__return__' in dbg.expr:
                 return AfterExecution.Initialized
             dbg.count -= 1
             if dbg.count > 0:
@@ -84,6 +84,24 @@ class AfterExecution:
             frame.f_locals['__return__'] = return_value
             dbg.eval_expr(frame)
             return Completed
+        
+        @staticmethod
+        def dispatch_exception(dbg: 'ExpressionInspector', frame, exc_info):
+            if not dbg.break_here(frame):
+                etype, evalue, tb = exc_info
+                dbg.result['exception'] = {
+                    "stage": "exception before breakpoint",
+                    "type": etype.__name__,
+                    "message": str(evalue),
+                    "traceback": traceback.format_tb(tb),
+                }
+                return AfterExecution.Initialized
+            dbg.count -= 1
+            if dbg.count > 0:
+                return AfterExecution.Initialized
+            frame.f_locals['__exception__'] = [exc_info[0].__name__, str(exc_info[1])]
+            dbg.eval_expr(frame)
+            return Completed
 
     class Breakpoint(State):
         @staticmethod
@@ -94,6 +112,10 @@ class AfterExecution:
         @staticmethod
         def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
             raise RuntimeError("unreachable")
+        
+        @staticmethod
+        def dispatch_exception(dbg: 'ExpressionInspector', frame, exc_info):
+            raise RuntimeError("unreachable")
 
 class BeforeExecution:
     class Initialized(State):
@@ -101,7 +123,7 @@ class BeforeExecution:
         def dispatch_line(dbg: 'ExpressionInspector', frame):
             if not dbg.break_here(frame):
                 return BeforeExecution.Initialized
-            if dbg.source_line.startswith('return'):
+            if '__exception__' in dbg.expr or '__return__' in dbg.expr:
                 return BeforeExecution.Initialized
             dbg.count -= 1
             if dbg.count > 0:
@@ -117,6 +139,24 @@ class BeforeExecution:
             if dbg.count > 0:
                 return BeforeExecution.Initialized
             frame.f_locals['__return__'] = return_value
+            dbg.eval_expr(frame)
+            return Completed
+        
+        @staticmethod
+        def dispatch_exception(dbg: 'ExpressionInspector', frame, exc_info):
+            if not dbg.break_here(frame):
+                etype, evalue, tb = exc_info
+                dbg.result['exception'] = {
+                    "stage": "exception before breakpoint",
+                    "type": etype.__name__,
+                    "message": str(evalue),
+                    "traceback": traceback.format_tb(tb),
+                }
+                return BeforeExecution.Initialized
+            dbg.count -= 1
+            if dbg.count > 0:
+                return BeforeExecution.Initialized
+            frame.f_locals['__exception__'] = [exc_info[0].__name__, str(exc_info[1])]
             dbg.eval_expr(frame)
             return Completed
 
@@ -164,17 +204,15 @@ class ExpressionInspector(bdb.Bdb):
         self.state = self.state.dispatch_return(self, frame, return_value)
     
     def user_exception(self, frame, exc_info):
-        etype, evalue, tb = exc_info
-        self.result['exception'] = {
-            "stage": "exception before breakpoint",
-            "type": etype.__name__,
-            "message": str(evalue),
-            "traceback": traceback.format_tb(tb),
-        }
+        self.state = self.state.dispatch_exception(self, frame, exc_info)
     
     def eval_expr(self, frame):
         try:
-            value = eval(self.expr, frame.f_globals, frame.f_locals)
+            if '__return__' in self.expr and '__exception__' in frame.f_locals:
+                expr = '__exception__'
+            else:
+                expr = self.expr
+            value = eval(expr, frame.f_globals, frame.f_locals)
             self.result['value'] = serialize(value)
             self.result['exception'] = None
         except Exception as e:
