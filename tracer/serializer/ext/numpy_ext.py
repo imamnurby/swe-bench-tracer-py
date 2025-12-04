@@ -31,6 +31,13 @@ class MaskedArrayHandler(BaseHandler):
         except Exception:
             return obj
 
+class NumpyBoolHandler(BaseHandler):
+    def flatten(self, obj, data):
+        return bool(obj)
+    
+    def restore(self, obj):
+        return obj
+
 def try_import_numpy(mod_name: str, class_names: list, handler: BaseHandler, base=False):
     for class_name in class_names:
         try:
@@ -45,6 +52,11 @@ try_import_numpy(
     "numpy.ma",
     ["MaskedArray"],
     MaskedArrayHandler,
+)
+try_import_numpy(
+    "numpy",
+    ["bool_"],
+    NumpyBoolHandler,
 )
 
 def register_handlers():
