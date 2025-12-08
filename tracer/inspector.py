@@ -172,7 +172,7 @@ class ExpressionInspector(bdb.Bdb):
         assert mode in ['before', 'after'], "mode must be 'before' or 'after'"
         self.state = get_initial_state(mode)
         self.source_line = get_source_code_line(bp_file, bp_line).strip()
-        self.expr = expr if isinstance(expr, list) else [expr]
+        self.expr = self._init_expr(expr)
         self.save_path = save_path
         self.count = count
         self.mode = mode
@@ -210,6 +210,17 @@ class ExpressionInspector(bdb.Bdb):
     
     def user_exception(self, frame, exc_info):
         self.state = self.state.dispatch_exception(self, frame, exc_info)
+
+    def _init_expr(self, expr):
+        if isinstance(expr, list):
+            return expr
+        assert isinstance(expr, str)
+        expr = expr.strip()
+        if expr.startswith('[') and expr.endswith(']'):
+            loaded = json.loads(expr)
+            if isinstance(loaded, list) and all(isinstance(e, str) for e in loaded):
+                return loaded
+        return [expr]
     
     def _exprs_are_exc_or_return(self):
         if self.mode == 'after':

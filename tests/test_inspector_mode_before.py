@@ -249,6 +249,17 @@ def test_inspect_return_at_wrong_line():
     assert_equals(result.value, None)
     assert_equals(result.exception.stage, 'not reached')
 
+def test_multi_expr_with_json_string():
+    def func():
+        a = 7
+        b = 8
+        c = a + b
+        return c
+    with Inspector(FILE_PATH, 257, '["a", "b", "c"]', mode='before') as inspector:
+        func()
+    result = Result(**inspector.result)
+    assert_equals(result.value, [7, 8, 15])
+
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
     for test_func in test_funcs:
