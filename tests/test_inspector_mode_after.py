@@ -249,15 +249,17 @@ def test_inspect_return_at_wrong_line():
     assert_equals(result.value, None)
     assert_equals(result.exception.stage, 'not reached')
 
-def test_multi_expr_with_json_string():
+def test_multi_expr_with_encoded_string():
+    from tracer.inspector import encode_expr_list
     def func():
         a = 7
         b = 8
         c = a + b
         return c
-    with Inspector(FILE_PATH, 256, '["a", "b", "c"]', mode='after') as inspector:
+    with Inspector(FILE_PATH, 257, encode_expr_list(["a", "b", "c"]), mode='after') as inspector:
         func()
     result = Result(**inspector.result)
+    assert_equals(inspector.expr, ["a", "b", "c"])
     assert_equals(result.value, [7, 8, 15])
 
 if __name__ == "__main__":

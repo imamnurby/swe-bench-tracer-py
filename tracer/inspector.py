@@ -2,13 +2,26 @@ import os
 import bdb
 import sys
 import json
+import base64
 import signal
 import traceback
 import multiprocessing as mp
 
 from tracer.serializer import serialize
 
-__all__ = ['ExpressionInspector']
+__all__ = ['ExpressionInspector', 'encode_expr_list']
+
+def encode_expr_list(exprs: list[str]) -> str:
+    encoded = base64.b64encode(json.dumps(exprs).encode()).decode()
+    return f'b64:{encoded}'
+
+def decode_expr_list(encoded: str) -> list[str]:
+    if not encoded.startswith('b64:'):
+        raise ValueError("Invalid encoded expression list")
+    b64 = encoded[4:]
+    exprs = json.loads(base64.b64decode(b64))
+    assert isinstance(exprs, list) and all(isinstance(e, str) for e in exprs)
+    return exprs
 
 def get_source_code_line(file_path: str, lineno: int) -> str:
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -215,12 +228,10 @@ class ExpressionInspector(bdb.Bdb):
         if isinstance(expr, list):
             return expr
         assert isinstance(expr, str)
-        expr = expr.strip()
-        if expr.startswith('[') and expr.endswith(']'):
-            loaded = json.loads(expr)
-            if isinstance(loaded, list) and all(isinstance(e, str) for e in loaded):
-                return loaded
-        return [expr]
+        try:
+            return decode_expr_list(expr)
+        except Exception:
+            return [expr]
     
     def _exprs_are_exc_or_return(self):
         if self.mode == 'after':
