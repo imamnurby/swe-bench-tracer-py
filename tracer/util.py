@@ -1,3 +1,4 @@
+import os
 import ast
 import sys
 import threading
@@ -75,7 +76,7 @@ QUALNAME_CACHE = ThreadSafeCache(max_size=131072)
 def get_func_qualname(frame: FrameType, source_lines_cache: dict = {}) -> str:
     if sys.version_info >= (3, 11):
         return frame.f_code.co_qualname
-    if frame.f_code.co_filename == '<string>':
+    if not os.path.exists(frame.f_code.co_filename):
         return frame.f_code.co_name
     key1 = frame.f_code.co_filename
     key2 = (frame.f_code.co_name, frame.f_code.co_firstlineno)
