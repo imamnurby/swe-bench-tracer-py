@@ -115,6 +115,6 @@ class InspectionException(BaseModel):
 class InspectionResult(BaseModel):
     file: str
     line: int
-    expr: str
-    value: Optional[Any]
-    exception: Optional[InspectionException]
+    expr: List[str]
+    value: Optional[List[Any]]
+    exception: InspectionException | List[Optional[InspectionException]]

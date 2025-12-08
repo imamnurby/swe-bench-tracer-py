@@ -19,7 +19,7 @@ def test_basic_function():
     with Inspector(FILE_PATH, 18, 'c', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 30)
+    assert_equals(result.value[0], 30)
 
 def test_function_with_exception_handled():
     def func():
@@ -34,12 +34,12 @@ def test_function_with_exception_handled():
     with Inspector(FILE_PATH, 33, 'c', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 40)
+    assert_equals(result.value[0], 40)
     with Inspector(FILE_PATH, 31, 'b', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.exception, None)
-    assert_equals(result.value, 20)
+    assert_equals(result.exception[0], None)
+    assert_equals(result.value[0], 20)
 
 def test_function_with_exception_unhandled():
     def func():
@@ -64,11 +64,11 @@ def test_more_complex_expr1():
     with Inspector(FILE_PATH, 63, 'len(c)', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 6)
+    assert_equals(result.value[0], 6)
     with Inspector(FILE_PATH, 63, 'c[3]', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 4)
+    assert_equals(result.value[0], 4)
 
 def test_variable_scope():
     def func1():
@@ -81,12 +81,12 @@ def test_variable_scope():
     with Inspector(FILE_PATH, 80, 'b', mode='before') as inspector:
         func1()
     result = Result(**inspector.result)
-    assert_equals(result.value, None)
-    assert_equals(result.exception.type, 'NameError')
+    assert_equals(result.value[0], None)
+    assert_equals(result.exception[0].type, 'NameError')
     with Inspector(FILE_PATH, 78, 'a', mode='before') as inspector:
         func1()
     result = Result(**inspector.result)
-    assert_equals(result.value, 10)
+    assert_equals(result.value[0], 10)
     
     def func2():
         a = 10
@@ -97,7 +97,7 @@ def test_variable_scope():
     with Inspector(FILE_PATH, 96, 'b', mode='before') as inspector:
         func2()
     result = Result(**inspector.result)
-    assert_equals(result.value, 20)
+    assert_equals(result.value[0], 20)
 
 def test_count_parameter():
     def func():
@@ -108,7 +108,7 @@ def test_count_parameter():
     with Inspector(FILE_PATH, 106, 'x', count=3, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 2)
+    assert_equals(result.value[0], 2)
 
 def test_more_complex_expr2():
     def func():
@@ -122,7 +122,7 @@ def test_more_complex_expr2():
     with Inspector(FILE_PATH, 121, 'obj.get_val()', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 42)
+    assert_equals(result.value[0], 42)
 
 def test_library_call():
     import numpy as np
@@ -134,11 +134,11 @@ def test_library_call():
     with Inspector(FILE_PATH, 133, 'c.tolist()', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, [5, 7, 9])
+    assert_equals(result.value[0], [5, 7, 9])
     with Inspector(FILE_PATH, 133, 'int(np.sum(c))', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 21)
+    assert_equals(result.value[0], 21)
 
 def test_return_inspection():
     def func():
@@ -148,11 +148,11 @@ def test_return_inspection():
     with Inspector(FILE_PATH, 147, '__return__', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 50)
+    assert_equals(result.value[0], 50)
     with Inspector(FILE_PATH, 147, '__return__ * 2', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 100)
+    assert_equals(result.value[0], 100)
 
 def test_function_call_in_return():
     def helper(x):
@@ -163,15 +163,15 @@ def test_function_call_in_return():
     with Inspector(FILE_PATH, 162, '__return__', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 6)
+    assert_equals(result.value[0], 6)
     with Inspector(FILE_PATH, 162, 'helper(__return__)', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 7)
+    assert_equals(result.value[0], 7)
     with Inspector(FILE_PATH, 159, '__return__', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 6)
+    assert_equals(result.value[0], 6)
 
 def test_nested_call_in_return():
     def helper1(x):
@@ -184,7 +184,7 @@ def test_nested_call_in_return():
     with Inspector(FILE_PATH, 183, '__return__', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, 18)
+    assert_equals(result.value[0], 18)
 
 def test_func_returning_none_implicitly():
     def func():
@@ -192,7 +192,7 @@ def test_func_returning_none_implicitly():
     with Inspector(FILE_PATH, 191, '__return__', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, None)
+    assert_equals(result.value[0], None)
 
 def test_func_with_exception_unhandled():
     def func():
@@ -202,11 +202,11 @@ def test_func_with_exception_unhandled():
     with Inspector(FILE_PATH, 201, '__return__', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, ['ZeroDivisionError', 'division by zero'])
+    assert_equals(result.value[0], ['ZeroDivisionError', 'division by zero'])
     with Inspector(FILE_PATH, 201, '__exception__', mode='before') as inspector:
         func()
     result = Result(**inspector.result)
-    assert_equals(result.value, ['ZeroDivisionError', 'division by zero'])
+    assert_equals(result.value[0], ['ZeroDivisionError', 'division by zero'])
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]

@@ -2,7 +2,9 @@ import os
 import bdb
 import sys
 import json
+import signal
 import traceback
+import multiprocessing as mp
 
 from tracer.serializer import serialize
 
@@ -66,7 +68,7 @@ class AfterExecution:
         def dispatch_line(dbg: 'ExpressionInspector', frame):
             if not dbg.break_here(frame):
                 return AfterExecution.Initialized
-            if '__exception__' in dbg.expr or '__return__' in dbg.expr:
+            if dbg.exprs_are_exc_or_return:
                 return AfterExecution.Initialized
             dbg.count -= 1
             if dbg.count > 0:
@@ -123,7 +125,7 @@ class BeforeExecution:
         def dispatch_line(dbg: 'ExpressionInspector', frame):
             if not dbg.break_here(frame):
                 return BeforeExecution.Initialized
-            if '__exception__' in dbg.expr or '__return__' in dbg.expr:
+            if dbg.exprs_are_exc_or_return:
                 return BeforeExecution.Initialized
             dbg.count -= 1
             if dbg.count > 0:
@@ -161,7 +163,7 @@ class BeforeExecution:
             return Completed
 
 class ExpressionInspector(bdb.Bdb):
-    def __init__(self, bp_file: str, bp_line: int, expr: str, 
+    def __init__(self, bp_file: str, bp_line: int, expr: str | list[str], 
                  save_path: str = None, count: int = 1, 
                  mode: str = 'before'):
         super().__init__()
@@ -170,15 +172,15 @@ class ExpressionInspector(bdb.Bdb):
         assert mode in ['before', 'after'], "mode must be 'before' or 'after'"
         self.state = get_initial_state(mode)
         self.source_line = get_source_code_line(bp_file, bp_line).strip()
-        self.expr = expr
+        self.expr = expr if isinstance(expr, list) else [expr]
         self.count = count
         self.save_path = save_path
         self.result = {
             'mode': mode,
             'file': bp_file,
             'line': bp_line,
-            'count': count,
-            'expr': expr,
+            'count': self.count,
+            'expr': self.expr,
             'value': None,
             'exception': {
                 'stage': 'not reached',
@@ -187,6 +189,7 @@ class ExpressionInspector(bdb.Bdb):
                 'traceback': None,
             },
         }
+        self.exprs_are_exc_or_return = self._exprs_are_exc_or_return()
         self.set_break(filename=bp_file, lineno=bp_line)
     
     def __enter__(self):
@@ -206,22 +209,68 @@ class ExpressionInspector(bdb.Bdb):
     def user_exception(self, frame, exc_info):
         self.state = self.state.dispatch_exception(self, frame, exc_info)
     
-    def eval_expr(self, frame):
+    def _exprs_are_exc_or_return(self):
+        if all('__exception__' in expr or '__return__' in expr for expr in self.expr):
+            return True
+        if all('__exception__' not in expr and '__return__' not in expr for expr in self.expr):
+            return False
+        self.result['exception'] = {
+            'stage': 'initialization',
+            'type': 'RuntimeError',
+            'message': "Mixed expressions with and without __exception__/__return__",
+            'traceback': [],
+        }
+        self.set_quit()
+        raise RuntimeError("unreachable")
+    
+    @staticmethod
+    def fork_eval(queue, frame, expr, idx, timeout=60):
+        def _timeout_handler(signum, frame):
+            raise TimeoutError("Expression evaluation timed out")
+        
+        if '__return__' in expr and '__exception__' in frame.f_locals:
+            expr = '__exception__'
+        signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.alarm(timeout)
         try:
-            if '__return__' in self.expr and '__exception__' in frame.f_locals:
-                expr = '__exception__'
-            else:
-                expr = self.expr
             value = eval(expr, frame.f_globals, frame.f_locals)
-            self.result['value'] = serialize(value)
-            self.result['exception'] = None
+            serialized = serialize(value)
+            queue.put({
+                'idx': idx,
+                'value': serialized,
+                'exception': None,
+            })
         except Exception as e:
-            self.result['exception'] = {
-                'stage': 'evaluation',
-                'type': type(e).__name__,
-                'message': str(e),
-                'traceback': traceback.format_tb(e.__traceback__),
-            }
+            queue.put({
+                'idx': idx,
+                'value': None,
+                'exception': {
+                    'stage': 'evaluation',
+                    'type': type(e).__name__,
+                    'message': str(e),
+                    'traceback': traceback.format_tb(e.__traceback__),
+                }
+            })
+        finally:
+            signal.alarm(0)
+    
+    def eval_expr(self, frame):
+        queue = mp.Queue()
+        procs = [mp.Process(target=self.fork_eval, args=(queue, frame, expr, idx))
+                 for idx, expr in enumerate(self.expr)]
+        for p in procs: p.start()
+        for p in procs: p.join()
+        results = [queue.get() for _ in range(len(self.expr))]
+        results.sort(key=lambda x: x['idx'])
+        self.result['value'] = []
+        self.result['exception'] = []
+        for result in results:
+            if result['exception'] is None:
+                self.result['value'].append(result['value'])
+                self.result['exception'].append(None)
+            else:
+                self.result['value'].append(None)
+                self.result['exception'].append(result['exception'])   
         self.set_quit()
     
     def save_result(self):
