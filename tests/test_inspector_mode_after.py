@@ -41,7 +41,7 @@ def test_function_with_exception_handled():
     assert_equals(result.exception[0], None)
     assert_equals(result.value[0], 30)
 
-def test_function_with_exception_unhandled():
+def test_function_with_exception_unhandled_before_inspection():
     def func():
         a = 10
         b = 20
@@ -194,7 +194,7 @@ def test_func_returning_none_implicitly():
     result = Result(**inspector.result)
     assert_equals(result.value[0], None)
 
-def test_func_with_exception_unhandled():
+def test_function_with_exception_unhandled_at_inspection():
     def func():
         x = 10
         y = 0
@@ -207,6 +207,47 @@ def test_func_with_exception_unhandled():
         func()
     result = Result(**inspector.result)
     assert_equals(result.value[0], ['ZeroDivisionError', 'division by zero'])
+
+def test_multiple_exprs():
+    def func():
+        a = 3
+        b = 4
+        c = a * b
+        return c
+    with Inspector(FILE_PATH, 215, ['a', 'b', 'c'], mode='after') as inspector:
+        func()
+    result = Result(**inspector.result)
+    assert_equals(result.value, [3, 4, 12])
+
+def test_call_in_return_that_changes_variable():
+    def helper(x):
+        x['key'] = 5
+        return x
+    def func():
+        a = {}
+        return helper(a)
+    with Inspector(FILE_PATH, 228, ['a', '__return__'], mode='after') as inspector:
+        func()
+    result = Result(**inspector.result)
+    # Inspection of __return__ is after the execution of line 228 regardless of mode,
+    # and 'a' is inspected after the execution in 'after' mode.
+    # So putting 'a' and '__return__' together is compatible in 'after' mode
+    # We accept this kind of expr list in 'after' mode
+    assert_equals(result.value, [{"key": 5}, {'key': 5}])
+    assert_equals(result.exception[0], None)
+
+def test_inspect_return_at_wrong_line():
+    def func():
+        a = 5
+        b = 10
+        return a * b
+    with Inspector(FILE_PATH, 242, ['a', '__return__'], mode='after') as inspector:
+        func()
+    result = Result(**inspector.result)
+    # No return event at line 242, so the debugger does not stop
+    # Line 242 is never reached later
+    assert_equals(result.value, None)
+    assert_equals(result.exception.stage, 'not reached')
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]

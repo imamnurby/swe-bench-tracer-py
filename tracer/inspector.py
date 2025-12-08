@@ -173,10 +173,11 @@ class ExpressionInspector(bdb.Bdb):
         self.state = get_initial_state(mode)
         self.source_line = get_source_code_line(bp_file, bp_line).strip()
         self.expr = expr if isinstance(expr, list) else [expr]
-        self.count = count
         self.save_path = save_path
+        self.count = count
+        self.mode = mode
         self.result = {
-            'mode': mode,
+            'mode': self.mode,
             'file': bp_file,
             'line': bp_line,
             'count': self.count,
@@ -190,7 +191,8 @@ class ExpressionInspector(bdb.Bdb):
             },
         }
         self.exprs_are_exc_or_return = self._exprs_are_exc_or_return()
-        self.set_break(filename=bp_file, lineno=bp_line)
+        if self.exprs_are_exc_or_return is not None:
+            self.set_break(filename=bp_file, lineno=bp_line)
     
     def __enter__(self):
         self.set_trace()
@@ -210,18 +212,22 @@ class ExpressionInspector(bdb.Bdb):
         self.state = self.state.dispatch_exception(self, frame, exc_info)
     
     def _exprs_are_exc_or_return(self):
-        if all('__exception__' in expr or '__return__' in expr for expr in self.expr):
-            return True
-        if all('__exception__' not in expr and '__return__' not in expr for expr in self.expr):
+        if self.mode == 'after':
+            if any('__exception__' in expr or '__return__' in expr for expr in self.expr):
+                return True
             return False
-        self.result['exception'] = {
-            'stage': 'initialization',
-            'type': 'RuntimeError',
-            'message': "Mixed expressions with and without __exception__/__return__",
-            'traceback': [],
-        }
-        self.set_quit()
-        raise RuntimeError("unreachable")
+        else:
+            if all('__exception__' in expr or '__return__' in expr for expr in self.expr):
+                return True
+            if all('__exception__' not in expr and '__return__' not in expr for expr in self.expr):
+                return False
+            self.result['exception'] = {
+                'stage': 'initialization',
+                'type': 'ValueError',
+                'message': "Mixed expressions with and without __exception__/__return__",
+                'traceback': [],
+            }
+            return None
     
     @staticmethod
     def fork_eval(queue, frame, expr, idx, timeout=60):
@@ -260,7 +266,7 @@ class ExpressionInspector(bdb.Bdb):
                  for idx, expr in enumerate(self.expr)]
         for p in procs: p.start()
         for p in procs: p.join()
-        results = [queue.get() for _ in range(len(self.expr))]
+        results = [queue.get_nowait() for _ in range(len(self.expr))]
         results.sort(key=lambda x: x['idx'])
         self.result['value'] = []
         self.result['exception'] = []
