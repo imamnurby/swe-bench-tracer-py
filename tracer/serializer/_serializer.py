@@ -1,4 +1,5 @@
 import io
+import sys
 import json
 import inspect
 import jsonpickle
@@ -12,6 +13,9 @@ from tracer.serializer.util import (
     exception_guard,
     isolate_parameters,
 )
+
+if hasattr(sys, 'set_int_max_str_digits'):
+    sys.set_int_max_str_digits(0)
 
 def registry_get_monkey_patch(self):
     '''
