@@ -176,7 +176,7 @@ class BeforeExecution:
             return Completed
 
 class ExpressionInspector(bdb.Bdb):
-    def __init__(self, bp_file: str, bp_line: int, expr: str | list[str], 
+    def __init__(self, bp_file: str, bp_line: int, expr, 
                  save_path: str = None, count: int = 1, 
                  mode: str = 'before'):
         super().__init__()
