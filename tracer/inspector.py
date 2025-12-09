@@ -11,11 +11,11 @@ from tracer.serializer import serialize
 
 __all__ = ['ExpressionInspector', 'encode_expr_list']
 
-def encode_expr_list(exprs: list[str]) -> str:
+def encode_expr_list(exprs: list) -> str:
     encoded = base64.b64encode(json.dumps(exprs).encode()).decode()
     return f'b64:{encoded}'
 
-def decode_expr_list(encoded: str) -> list[str]:
+def decode_expr_list(encoded: str) -> list:
     if not encoded.startswith('b64:'):
         raise ValueError("Invalid encoded expression list")
     b64 = encoded[4:]
