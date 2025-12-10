@@ -40,7 +40,7 @@ class Event(BaseModel):
 
     def dump(self):
         return self.model_dump(exclude={
-            "event_id", "line_number", "excluded",
+            "event_id", "event_type", "line_number", "statement", "excluded",
         })
 
     def deserialized(self):
@@ -58,7 +58,7 @@ class FunctionEvent(Event):
     
     def dump(self):
         return self.model_dump(exclude={
-            "event_id", "line_number", "excluded",
+            "event_id", "event_type", "line_number", "statement", "excluded",
             "inherited_control_dependencies",
         })
 
@@ -73,7 +73,7 @@ class ReturnEvent(Event):
 
     def dump(self):
         return self.model_dump(exclude={
-            "event_id", "line_number", "excluded",
+            "event_id", "event_type", "line_number", "statement", "excluded",
             "vars_used", "caller_name",
         })
 
@@ -84,7 +84,7 @@ class ExceptionEvent(Event):
 
     def dump(self):
         return self.model_dump(exclude={
-            "event_id", "line_number", "excluded",
+            "event_id", "event_type", "line_number", "statement", "excluded",
             "vars_used",
         })
 
@@ -101,7 +101,7 @@ class LineEvent(Event):
 
     def dump(self):
         return self.model_dump(exclude={
-            "event_id", "line_number", "excluded",
+            "event_id", "event_type", "line_number", "statement", "excluded",
             "vars_defined", "vars_used",
             "control_dependencies", "inherited_control_dependencies",
         })
