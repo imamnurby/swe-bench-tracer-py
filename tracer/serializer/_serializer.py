@@ -22,18 +22,26 @@ def registry_get_monkey_patch(self):
     - Base handler is registered for type A
     - An instance of type B (subclass of A) is requested
     - Only return the base handler if A and B are defined in the same top module
+    - Exception: if A/B inherits from unittest.TestCase, allow cross-module base handler usage
     '''
     def is_same_module(cls_or_name: type, cls: type):
         cls_or_name_module = cls_or_name.__module__.split('.')[0]
         cls_module = cls.__module__.split('.')[0]
         return cls_or_name_module == cls_module
     
+    def is_subclass_of_testcase(cls: type):
+        from unittest import TestCase
+        return issubclass(cls, TestCase)
+    
     def get(cls_or_name, default=None):
         handler = self._handlers.get(cls_or_name)
         # attempt to find a base class
         if handler is None and jsonpickle.util.is_type(cls_or_name):
             for cls, base_handler in self._base_handlers.items():
-                if issubclass(cls_or_name, cls) and is_same_module(cls_or_name, cls):
+                if issubclass(cls_or_name, cls) and (
+                    is_same_module(cls_or_name, cls) or
+                    is_subclass_of_testcase(cls)
+                ):
                     return base_handler
         return default if handler is None else handler
     return get
