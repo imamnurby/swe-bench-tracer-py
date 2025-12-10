@@ -145,11 +145,11 @@ def test_return_inspection():
         a = 5
         b = 10
         return a * b
-    with Inspector(FILE_PATH, 147, '__return__', mode='before') as inspector:
+    with Inspector(FILE_PATH, 147, '__return__', count=2, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value[0], 50)
-    with Inspector(FILE_PATH, 147, '__return__ * 2', mode='before') as inspector:
+    with Inspector(FILE_PATH, 147, '__return__ * 2', count=2, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value[0], 100)
@@ -160,15 +160,15 @@ def test_function_call_in_return():
     def func():
         a = 5
         return helper(a)
-    with Inspector(FILE_PATH, 162, '__return__', mode='before') as inspector:
+    with Inspector(FILE_PATH, 162, '__return__', count=2, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value[0], 6)
-    with Inspector(FILE_PATH, 162, 'helper(__return__)', mode='before') as inspector:
+    with Inspector(FILE_PATH, 162, 'helper(__return__)', count=2, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value[0], 7)
-    with Inspector(FILE_PATH, 159, '__return__', mode='before') as inspector:
+    with Inspector(FILE_PATH, 159, '__return__', count=2, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value[0], 6)
@@ -181,7 +181,7 @@ def test_nested_call_in_return():
     def func():
         a = 4
         return helper2(a)
-    with Inspector(FILE_PATH, 183, '__return__', mode='before') as inspector:
+    with Inspector(FILE_PATH, 183, '__return__', count=2, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value[0], 18)
@@ -189,7 +189,7 @@ def test_nested_call_in_return():
 def test_func_returning_none_implicitly():
     def func():
         pass
-    with Inspector(FILE_PATH, 191, '__return__', mode='before') as inspector:
+    with Inspector(FILE_PATH, 191, '__return__', count=2, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value[0], None)
@@ -199,11 +199,11 @@ def test_function_with_exception_unhandled_at_inspection():
         x = 10
         y = 0
         return x/y
-    with Inspector(FILE_PATH, 201, '__return__', mode='before') as inspector:
+    with Inspector(FILE_PATH, 201, '__return__', count=2, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value[0], ['ZeroDivisionError', 'division by zero'])
-    with Inspector(FILE_PATH, 201, '__exception__', mode='before') as inspector:
+    with Inspector(FILE_PATH, 201, '__exception__', count=2, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
     assert_equals(result.value[0], ['ZeroDivisionError', 'division by zero'])
@@ -226,7 +226,7 @@ def test_call_in_return_that_changes_variable():
     def func():
         a = {}
         return helper(a)
-    with Inspector(FILE_PATH, 228, ['a', '__return__'], mode='before') as inspector:
+    with Inspector(FILE_PATH, 228, ['a', '__return__'], count=2, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
     # Inspection of __return__ is after the execution of line 228 regardless of mode,
@@ -241,7 +241,7 @@ def test_inspect_return_at_wrong_line():
         a = 5
         b = 10
         return a * b
-    with Inspector(FILE_PATH, 242, ['__return__'], mode='before') as inspector:
+    with Inspector(FILE_PATH, 242, ['__return__'], count=2, mode='before') as inspector:
         func()
     result = Result(**inspector.result)
     # No return event at line 242, so the debugger does not stop

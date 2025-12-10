@@ -23,13 +23,6 @@ def decode_expr_list(encoded: str) -> list:
     assert isinstance(exprs, list) and all(isinstance(e, str) for e in exprs)
     return exprs
 
-def get_source_code_line(file_path: str, lineno: int) -> str:
-    with open(file_path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    if lineno < 1 or lineno > len(lines):
-        raise ValueError("Line number out of range")
-    return lines[lineno - 1]
-
 def get_initial_state(mode: str):
     if mode == 'before':
         return BeforeExecution.Initialized
@@ -80,8 +73,6 @@ class AfterExecution:
         @staticmethod
         def dispatch_line(dbg: 'ExpressionInspector', frame):
             if not dbg.break_here(frame):
-                return AfterExecution.Initialized
-            if dbg.exprs_are_exc_or_return:
                 return AfterExecution.Initialized
             dbg.count -= 1
             if dbg.count > 0:
@@ -138,8 +129,6 @@ class BeforeExecution:
         def dispatch_line(dbg: 'ExpressionInspector', frame):
             if not dbg.break_here(frame):
                 return BeforeExecution.Initialized
-            if dbg.exprs_are_exc_or_return:
-                return BeforeExecution.Initialized
             dbg.count -= 1
             if dbg.count > 0:
                 return BeforeExecution.Initialized
@@ -184,7 +173,6 @@ class ExpressionInspector(bdb.Bdb):
         assert count > 0, "count must be positive"
         assert mode in ['before', 'after'], "mode must be 'before' or 'after'"
         self.state = get_initial_state(mode)
-        self.source_line = get_source_code_line(bp_file, bp_line).strip()
         self.expr = self._init_expr(expr)
         self.save_path = save_path
         self.count = count
@@ -203,8 +191,8 @@ class ExpressionInspector(bdb.Bdb):
                 'traceback': None,
             },
         }
-        self.exprs_are_exc_or_return = self._exprs_are_exc_or_return()
-        if self.exprs_are_exc_or_return is not None:
+        self.clear_all_breaks()
+        if self._check_expr():
             self.set_break(filename=bp_file, lineno=bp_line)
     
     def __enter__(self):
@@ -233,23 +221,22 @@ class ExpressionInspector(bdb.Bdb):
         except Exception:
             return [expr]
     
-    def _exprs_are_exc_or_return(self):
-        if self.mode == 'after':
-            if any('__exception__' in expr or '__return__' in expr for expr in self.expr):
+    def _check_expr(self):
+        if self.mode == 'before':
+            if (
+                all('__exception__' in expr or '__return__' in expr for expr in self.expr)
+                or all('__exception__' not in expr and '__return__' not in expr for expr in self.expr)
+            ):
                 return True
-            return False
-        else:
-            if all('__exception__' in expr or '__return__' in expr for expr in self.expr):
-                return True
-            if all('__exception__' not in expr and '__return__' not in expr for expr in self.expr):
-                return False
             self.result['exception'] = {
                 'stage': 'initialization',
                 'type': 'ValueError',
                 'message': "Mixed expressions with and without __exception__/__return__",
                 'traceback': [],
             }
-            return None
+            return False
+        else:
+            return True
     
     @staticmethod
     def fork_eval(queue, frame, expr, idx, timeout=60):
