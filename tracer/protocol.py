@@ -1,7 +1,16 @@
+import re
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 from tracer.serializer import deserialize
+
+REPR_PATTERN = re.compile(r'<(?P<object>[^>]+?) object at 0x[0-9a-fA-F]+>')
+
+def sanitize_repr_address(value: str) -> str:
+    def _strip_address(match: re.Match) -> str:
+        return f"<{match.group('object')}>"
+
+    return REPR_PATTERN.sub(_strip_address, value)
 
 class Event(BaseModel):
     event_id: int
@@ -83,7 +92,8 @@ class ExceptionEvent(Event):
     vars_used: Optional[List[str]] = None
 
     def dump(self):
-        return self.model_dump(exclude={
+        copied = self.model_copy(update={"exception_value": sanitize_repr_address(self.exception_value)})
+        return copied.model_dump(exclude={
             "event_id", "event_type", "line_number", "statement", "excluded",
             "vars_used",
         })
