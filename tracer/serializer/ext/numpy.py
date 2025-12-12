@@ -3,7 +3,7 @@ def register_handlers():
         import numpy as np
         from jsonpickle.ext import numpy as jsonpickle_numpy
         try:
-            jsonpickle_numpy.register_handlers(ndarray_mode='ignore')
+            jsonpickle_numpy.register_handlers(ndarray_mode='ignore', ndarray_size_threshold=None)
         except Exception:
             jsonpickle_numpy.register_handlers()
         return [
