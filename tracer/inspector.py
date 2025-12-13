@@ -13,7 +13,7 @@ __all__ = ['ExpressionInspector', 'encode_expr_list']
 
 def encode_expr_list(exprs):
     encoded = base64.b64encode(json.dumps(exprs).encode()).decode()
-    return f'b64:{encoded}'
+    return 'b64:{}'.format(encoded)
 
 def decode_expr_list(encoded):
     if not encoded.startswith('b64:'):
