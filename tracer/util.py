@@ -3,8 +3,6 @@ import ast
 import sys
 import threading
 
-from types import FrameType
-
 class ThreadSafeCache:
     def __init__(self, max_size):
         self._cache = {}
@@ -73,7 +71,7 @@ class QualnameVisitor(ast.NodeVisitor):
 
 QUALNAME_CACHE = ThreadSafeCache(max_size=131072)
 
-def get_func_qualname(frame: FrameType, source_lines_cache: dict = {}) -> str:
+def get_func_qualname(frame, source_lines_cache={}):
     if sys.version_info >= (3, 11):
         return frame.f_code.co_qualname
     if not os.path.exists(frame.f_code.co_filename):
@@ -83,7 +81,7 @@ def get_func_qualname(frame: FrameType, source_lines_cache: dict = {}) -> str:
     qualnames = QUALNAME_CACHE.get_or_set(key1, lambda: _update_func_qualnames(key1, source_lines_cache))
     return qualnames.get(key2, frame.f_code.co_name)
 
-def _update_func_qualnames(filename: str, source_lines_cache: dict):
+def _update_func_qualnames(filename, source_lines_cache):
     visitor = QualnameVisitor()
     if filename not in source_lines_cache:
         with open(filename, 'r', encoding='utf-8') as f:

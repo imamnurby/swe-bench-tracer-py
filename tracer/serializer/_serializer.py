@@ -24,12 +24,12 @@ def registry_get_monkey_patch(self):
     - Only return the base handler if A and B are defined in the same top module
     - Exception: if A/B inherits from unittest.TestCase, allow cross-module base handler usage
     '''
-    def is_same_module(cls_or_name: type, cls: type):
+    def is_same_module(cls_or_name, cls):
         cls_or_name_module = cls_or_name.__module__.split('.')[0]
         cls_module = cls.__module__.split('.')[0]
         return cls_or_name_module == cls_module
     
-    def is_subclass_of_testcase(cls: type):
+    def is_subclass_of_testcase(cls):
         from unittest import TestCase
         return issubclass(cls, TestCase)
     

@@ -11,11 +11,11 @@ from tracer.serializer import serialize
 
 __all__ = ['ExpressionInspector', 'encode_expr_list']
 
-def encode_expr_list(exprs: list) -> str:
+def encode_expr_list(exprs):
     encoded = base64.b64encode(json.dumps(exprs).encode()).decode()
     return f'b64:{encoded}'
 
-def decode_expr_list(encoded: str) -> list:
+def decode_expr_list(encoded):
     if not encoded.startswith('b64:'):
         raise ValueError("Invalid encoded expression list")
     b64 = encoded[4:]
@@ -23,7 +23,7 @@ def decode_expr_list(encoded: str) -> list:
     assert isinstance(exprs, list) and all(isinstance(e, str) for e in exprs)
     return exprs
 
-def get_initial_state(mode: str):
+def get_initial_state(mode):
     if mode == 'before':
         return BeforeExecution.Initialized
     elif mode == 'after':
@@ -52,26 +52,26 @@ def get_initial_state(mode: str):
 # - when count is 0, the bp is considered "reached"
 class State:
     @staticmethod
-    def dispatch_line(dbg: 'ExpressionInspector', frame):
+    def dispatch_line(dbg, frame):
         raise NotImplementedError("Must be implemented by subclasses")
     
     @staticmethod
-    def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+    def dispatch_return(dbg, frame, return_value):
         raise NotImplementedError("Must be implemented by subclasses")
 
 class Completed(State):
     @staticmethod
-    def dispatch_line(dbg: 'ExpressionInspector', frame):
+    def dispatch_line(dbg, frame):
         raise RuntimeError("Inspection already completed")
     
     @staticmethod
-    def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+    def dispatch_return(dbg, frame, return_value):
         raise RuntimeError("Inspection already completed")
 
 class AfterExecution:
     class Initialized(State):
         @staticmethod
-        def dispatch_line(dbg: 'ExpressionInspector', frame):
+        def dispatch_line(dbg, frame):
             if not dbg.break_here(frame):
                 return AfterExecution.Initialized
             dbg.count -= 1
@@ -81,7 +81,7 @@ class AfterExecution:
             return AfterExecution.Breakpoint
 
         @staticmethod
-        def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+        def dispatch_return(dbg, frame, return_value):
             if not dbg.break_here(frame):
                 return AfterExecution.Initialized
             dbg.count -= 1
@@ -92,7 +92,7 @@ class AfterExecution:
             return Completed
         
         @staticmethod
-        def dispatch_exception(dbg: 'ExpressionInspector', frame, exc_info):
+        def dispatch_exception(dbg, frame, exc_info):
             if not dbg.break_here(frame):
                 etype, evalue, tb = exc_info
                 dbg.result['exception'] = {
@@ -111,22 +111,22 @@ class AfterExecution:
 
     class Breakpoint(State):
         @staticmethod
-        def dispatch_line(dbg: 'ExpressionInspector', frame):
+        def dispatch_line(dbg, frame):
             dbg.eval_expr(frame)
             return Completed
         
         @staticmethod
-        def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+        def dispatch_return(dbg, frame, return_value):
             raise RuntimeError("unreachable")
         
         @staticmethod
-        def dispatch_exception(dbg: 'ExpressionInspector', frame, exc_info):
+        def dispatch_exception(dbg, frame, exc_info):
             raise RuntimeError("unreachable")
 
 class BeforeExecution:
     class Initialized(State):
         @staticmethod
-        def dispatch_line(dbg: 'ExpressionInspector', frame):
+        def dispatch_line(dbg, frame):
             if not dbg.break_here(frame):
                 return BeforeExecution.Initialized
             dbg.count -= 1
@@ -136,7 +136,7 @@ class BeforeExecution:
             return Completed
 
         @staticmethod
-        def dispatch_return(dbg: 'ExpressionInspector', frame, return_value):
+        def dispatch_return(dbg, frame, return_value):
             if not dbg.break_here(frame):
                 return BeforeExecution.Initialized
             dbg.count -= 1
@@ -147,7 +147,7 @@ class BeforeExecution:
             return Completed
         
         @staticmethod
-        def dispatch_exception(dbg: 'ExpressionInspector', frame, exc_info):
+        def dispatch_exception(dbg, frame, exc_info):
             if not dbg.break_here(frame):
                 etype, evalue, tb = exc_info
                 dbg.result['exception'] = {
@@ -165,9 +165,7 @@ class BeforeExecution:
             return Completed
 
 class ExpressionInspector(bdb.Bdb):
-    def __init__(self, bp_file: str, bp_line: int, expr, 
-                 save_path: str = None, count: int = 1, 
-                 mode: str = 'before'):
+    def __init__(self, bp_file, bp_line, expr, save_path=None, count=1, mode='before'):
         super().__init__()
         assert os.path.isabs(bp_file), "bp_file must be an absolute path"
         assert count > 0, "count must be positive"

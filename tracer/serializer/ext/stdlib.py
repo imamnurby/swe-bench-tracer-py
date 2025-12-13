@@ -22,7 +22,7 @@ class GeneratorHandler(BaseHandler):
         return obj
 
 class FileHandler(BaseHandler):
-    def flatten(self, obj: io.IOBase, data):
+    def flatten(self, obj, data):
         try:
             name = obj.name
         except Exception:
@@ -33,28 +33,28 @@ class FileHandler(BaseHandler):
         return obj
 
 class TextIOHandler(BaseHandler):
-    def flatten(self, obj: io.TextIOWrapper, data):
+    def flatten(self, obj, data):
         return {"py/object": "io.TextIOWrapper", "name": obj.name, "mode": obj.mode, "encoding": obj.encoding}
     
     def restore(self, obj):
         return obj
 
 class SocketHandler(BaseHandler):
-    def flatten(self, obj: socket.socket, data):
+    def flatten(self, obj, data):
         return {"py/object": "socket.socket", "fd": obj.fileno(), "family": obj.family, "type": obj.type, "proto": obj.proto}
     
     def restore(self, obj):
         return obj
 
 class DecimalHandler(BaseHandler):
-    def flatten(self, obj: decimal.Decimal, data):
+    def flatten(self, obj, data):
         return {"py/object": "decimal.Decimal", "value": str(obj)}
     
     def restore(self, obj):
         return decimal.Decimal(obj["value"])
 
 class PropertyHandler(BaseHandler):
-    def flatten(self, obj: property, data):
+    def flatten(self, obj, data):
         fn = obj.fget
         if fn:
             fn.__doc__ = obj.__doc__
@@ -64,14 +64,14 @@ class PropertyHandler(BaseHandler):
         return obj
 
 class UUIDHandler(BaseHandler):
-    def flatten(self, obj: uuid.UUID, data):
+    def flatten(self, obj, data):
         return {"py/object": "uuid.UUID"}
     
     def restore(self, obj):
         return obj
 
 class DatetimeHandler(BaseHandler):
-    def flatten(self, obj: datetime.datetime, data):
+    def flatten(self, obj, data):
         return {
             "py/object": "datetime.datetime",
             "year": obj.year,
@@ -89,7 +89,7 @@ class DatetimeHandler(BaseHandler):
         return obj
 
 class DateHandler(BaseHandler):
-    def flatten(self, obj: datetime.date, data):
+    def flatten(self, obj, data):
         return {
             "py/object": "datetime.date",
             "year": obj.year,
@@ -105,7 +105,7 @@ class DateHandler(BaseHandler):
         )
 
 class TimeHandler(BaseHandler):
-    def flatten(self, obj: datetime.time, data):
+    def flatten(self, obj, data):
         return {
             "py/object": "datetime.time",
             "hour": obj.hour,

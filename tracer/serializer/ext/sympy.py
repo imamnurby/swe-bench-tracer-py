@@ -300,7 +300,7 @@ class BasicHandler(BaseHandler):
         except Exception:
             return obj
 
-def try_import_sympy(mod_name: str, class_names: list, handler: BaseHandler, base=False):
+def try_import_sympy(mod_name, class_names, handler, base=False):
     for class_name in class_names:
         try:
             mod = __import__(mod_name, fromlist=[class_name])
