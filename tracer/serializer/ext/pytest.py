@@ -40,6 +40,8 @@ def try_import_pytest(mod_name, class_names, handler, base=False):
                 PYTEST_REGISTRY.append((cls, handler, base))
         except ImportError:
             pass
+        except Exception as e:
+            print("Error when importing {}.{}: {} - {}".format(mod_name, class_name, type(e).__name__, e))
 
 def register_handlers():
     for cls, handler, base in PYTEST_REGISTRY:

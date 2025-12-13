@@ -174,6 +174,8 @@ def try_import_astropy(mod_name, class_names, handler, base=False):
                 ASTROPY_REGISTRY.append((cls, handler, base))
         except ImportError:
             pass
+        except Exception as e:
+            print("Error when importing {}.{}: {} - {}".format(mod_name, class_name, type(e).__name__, e))
 
 try_import_astropy(
     "astropy.units", 
