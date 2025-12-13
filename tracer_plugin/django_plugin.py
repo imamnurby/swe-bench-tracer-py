@@ -1,12 +1,14 @@
 import os
 import sys
+import inspect
 import threading
 
+from functools import partial
 from tracer import Tracker, ExecutionTracer, ExpressionInspector
 
 _state = threading.local()
 
-FAIL_TO_PASS_TESTS ={
+FAIL_TO_PASS_TESTS = {
     "django__django-10097": [
         "test_ascii_validator",
         "test_unicode_validator",
@@ -1532,6 +1534,28 @@ FAIL_TO_PASS_TESTS ={
     ]
 }
 
+# Designed for django__django-12209
+# test functions are partial methods in a class
+# we need to get the actual test method name as test id
+PARTIAL_METHOD_NAMES = [
+    "serializerTest",
+]
+
+def get_args(frame):
+    arg_names = inspect.getargvalues(frame).args[1:]  # skip 'self'
+    return [frame.f_locals.get(arg) for arg in arg_names]
+
+def get_test_id(frame):
+    _self = frame.f_locals.get("self", None)
+    if _self is None:
+        return frame.f_code.co_name
+    for attr in dir(_self):
+        _attr = getattr(_self, attr)
+        if isinstance(_attr, partial):
+            if _attr.func.__code__ == frame.f_code and list(_attr.args) == get_args(frame):
+                return attr
+    return frame.f_code.co_name
+
 def _get_allowed_functions():
     value = os.getenv("TRACER_ALLOWED_FUNCTIONS", "")
     if not value:
@@ -1545,6 +1569,8 @@ ALLOWED_FUNCTIONS = _get_allowed_functions()
 
 def _looks_like_unittest_func(frame):
     co = frame.f_code
+    if co.co_name in PARTIAL_METHOD_NAMES:
+        return get_test_id(frame)
     if not co.co_name.startswith("test_"):
         return None
     fn = (co.co_filename or "").replace("\\", "/")
