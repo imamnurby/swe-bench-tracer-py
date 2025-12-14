@@ -18,7 +18,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["tracer", "tracer_plugin"]
+include = ["tracer", "tracer_plugin", "tracer.*", "tracer_plugin.*"]
 
 [project.entry-points.pytest11]
 tracer_plugin = "tracer_plugin.pytest_plugin"
