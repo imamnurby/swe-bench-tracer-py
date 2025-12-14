@@ -2,7 +2,6 @@ import re
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
-from tracer.serializer import deserialize
 
 REPR_PATTERN = re.compile(r'<(?P<object>[^>]+?) object at 0x[0-9a-fA-F]+>')
 
@@ -52,19 +51,12 @@ class Event(BaseModel):
             "event_id", "event_type", "line_number", "statement", "excluded",
         })
 
-    def deserialized(self):
-        return self
-
 class FunctionEvent(Event):
     caller_name: str
     parameters: Dict[str, Any]
     parameter_sources: Dict
     inherited_control_dependencies: List[int]
 
-    def deserialized(self):
-        self.parameters = {k: deserialize(v) for k, v in self.parameters.items()}
-        return self
-    
     def dump(self):
         return self.model_dump(exclude={
             "event_id", "event_type", "line_number", "statement", "excluded",
@@ -75,10 +67,6 @@ class ReturnEvent(Event):
     vars_used: List[str]
     caller_name: str
     return_value: Any
-    
-    def deserialized(self):
-        self.return_value = deserialize(self.return_value)
-        return self
 
     def dump(self):
         return self.model_dump(exclude={
@@ -104,10 +92,6 @@ class LineEvent(Event):
     control_dependencies: List[int]
     inherited_control_dependencies: List[int]
     seen_variables: Dict[str, Any]
-
-    def deserialized(self):
-        self.seen_variables = {k: deserialize(v) for k, v in self.seen_variables.items()}
-        return self
 
     def dump(self):
         return self.model_dump(exclude={
