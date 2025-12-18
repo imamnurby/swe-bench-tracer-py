@@ -10,7 +10,6 @@ from tracer.serializer.ext.common import (
 try_import_xarray = partial(try_import, registry='xarray')
 register_handlers = partial(register_registry_handlers, registry='xarray')
 
-from xarray import DataArray
 class VariableHandler(BaseHandler):
     def flatten(self, obj, data):
         results = {"py/object": canonical_class_name(obj)}
@@ -24,7 +23,7 @@ class VariableHandler(BaseHandler):
         return obj
 
 class DataArrayHandler(BaseHandler):
-    def flatten(self, obj: DataArray, data):
+    def flatten(self, obj, data):
         results = {"py/object": canonical_class_name(obj)}
         try:
             results.update(self.context.flatten({
