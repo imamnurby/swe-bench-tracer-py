@@ -22,7 +22,9 @@ def registry_get_monkey_patch(self):
     - Base handler is registered for type A
     - An instance of type B (subclass of A) is requested
     - Only return the base handler if A and B are defined in the same top module
-    - Exception: if A/B inherits from unittest.TestCase, allow cross-module base handler usage
+    - Exception: allow cross-module base handler usage, if
+      - A inherits from unittest.TestCase, 
+      - A is from the django module (django test classes are not in the 'django' module)
     '''
     def is_same_module(cls_or_name, cls):
         cls_or_name_module = cls_or_name.__module__.split('.')[0]
@@ -33,6 +35,9 @@ def registry_get_monkey_patch(self):
         from unittest import TestCase
         return issubclass(cls, TestCase)
     
+    def is_from_django(cls):
+        return cls.__module__.startswith('django.')
+    
     def get(cls_or_name, default=None):
         handler = self._handlers.get(cls_or_name)
         # attempt to find a base class
@@ -40,7 +45,8 @@ def registry_get_monkey_patch(self):
             for cls, base_handler in self._base_handlers.items():
                 if issubclass(cls_or_name, cls) and (
                     is_same_module(cls_or_name, cls) or
-                    is_subclass_of_testcase(cls)
+                    is_subclass_of_testcase(cls) or
+                    is_from_django(cls)
                 ):
                     return base_handler
         return default if handler is None else handler
