@@ -4,6 +4,7 @@ import types
 import socket
 import decimal
 import datetime
+import threading
 
 from jsonpickle.handlers import BaseHandler, register
 
@@ -124,6 +125,16 @@ class TimeHandler(BaseHandler):
             tzinfo=self.context.restore(obj["tzinfo"], reset=False),
         )
 
+class ConditionHandler(BaseHandler):
+    def flatten(self, obj, data):
+        return {
+            "py/object": "threading.Condition",
+            "locked": self.context.flatten(obj._lock),
+        }
+    
+    def restore(self, obj):
+        return obj
+
 def register_handlers():
     register(type(iter([])), IteratorHandler)
     register(types.GeneratorType, GeneratorHandler)
@@ -136,8 +147,10 @@ def register_handlers():
     register(datetime.datetime, DatetimeHandler)
     register(datetime.date, DateHandler)
     register(datetime.time, TimeHandler)
+    register(threading.Condition, ConditionHandler)
     return [
         type(iter([])), types.GeneratorType, io.IOBase,
         io.TextIOWrapper, socket.socket, decimal.Decimal, property,
         uuid.UUID, datetime.datetime, datetime.date, datetime.time,
+        threading.Condition,
     ]

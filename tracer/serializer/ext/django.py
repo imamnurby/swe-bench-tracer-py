@@ -149,8 +149,19 @@ try_import_django(
     PlainHandler,
 )
 try_import_django(
+    "django.contrib.admin.views.autocomplete",
+    ["AutocompleteJsonView"],
+    PlainHandler,
+    base=True,
+)
+try_import_django(
     "django.http.response",
     ["HttpResponseBase"],
     DjangoHttpResponseHeadersHandler,
     base=True,
+)
+try_import_django(
+    "http.cookies",
+    ["SimpleCookie"],
+    PlainHandler,
 )

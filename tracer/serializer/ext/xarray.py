@@ -39,6 +39,25 @@ class DataArrayHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class TestDataArrayHandler(BaseHandler):
+    def flatten(self, obj, data):
+        results = {"py/object": canonical_class_name(obj)}
+        try:
+            results.update(self.context.flatten({
+                "attrs": obj.attrs,
+                "x": f"random numpy.ndarray with shape {obj.x.shape}",
+                "v": 'initialized with `Variable(["x", "y"], self.x)`',
+                "va": 'initialized with `Variable(["x", "y"], self.x, self.attrs)`',
+                "ds": 'initialized with `Dataset({"foo": self.v})`',
+                "dv": 'initialized with `self.ds["foo"]`'
+            }))
+        except Exception:
+            pass
+        return results
+
+    def restore(self, obj):
+        return obj
+
 try_import_xarray(
     "xarray.core.variable",
     ["Variable"],
@@ -48,4 +67,9 @@ try_import_xarray(
     "xarray.core.dataarray",
     ["DataArray"],
     DataArrayHandler,
+)
+try_import_xarray(
+    "xarray.tests.test_dataarray",
+    ["TestDataArray"],
+    TestDataArrayHandler,
 )

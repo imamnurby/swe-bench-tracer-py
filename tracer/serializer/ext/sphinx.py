@@ -45,6 +45,11 @@ try_import_sphinx(
     base=True,
 )
 try_import_sphinx(
+    "sphinx.builders",
+    ["Builder"],
+    PlainHandler,
+)
+try_import_sphinx(
     "sphinx.builders.gettext",
     ["Message"],
     MessageHandler,
