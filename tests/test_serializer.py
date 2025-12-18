@@ -259,7 +259,12 @@ def test_sympy_handler():
     assert_invertible(S.Pi)
     
     assert_invertible(Identity(3))
-    
+
+def test_sphinx_handler():
+    from pathlib import Path
+    from sphinx.testing.util import SphinxTestApp
+    app = SphinxTestApp(srcdir=Path(__file__).parent, confdir=Path(__file__).parent)
+    assert_equals(serialize(app), {'py/object': 'sphinx.testing.util.SphinxTestApp'})
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]
