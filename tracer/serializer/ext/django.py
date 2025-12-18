@@ -69,6 +69,28 @@ class DatabaseWrapperHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class HttpResponseRedirectLocationHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            result["status_code"] = getattr(obj, "status_code", None)
+            if hasattr(obj, "headers"):
+                loc = obj.headers.get("Location")
+                if loc is not None:
+                    result["location"] = str(loc)
+
+            # Older Django: response._headers (dict of lower->(orig,value))
+            elif hasattr(obj, "_headers"):
+                h = getattr(obj, "_headers", {})
+                if "location" in h and isinstance(h["location"], (tuple, list)) and len(h["location"]) == 2:
+                    result["location"] = str(h["location"][1])
+        except Exception:
+            pass
+        return result
+
+    def restore(self, obj):
+        return obj
+
 def try_import_django(mod_name, class_names, handler, base=False):
     for class_name in class_names:
         try:
@@ -114,6 +136,13 @@ try_import_django(
     "django.db.backends.sqlite3.base",
     ["DatabaseWrapper"],
     DatabaseWrapperHandler,
+)
+
+try_import_django(
+    "django.http.response",
+    ["HttpResponseBase"],
+    HttpResponseRedirectLocationHandler,
+    base=True,
 )
 
 def register_handlers():
