@@ -1,9 +1,13 @@
-from jsonpickle.handlers import BaseHandler, register
+from functools import partial
+from jsonpickle.handlers import BaseHandler
+from tracer.serializer.ext.common import (
+    try_import,
+    register_registry_handlers,
+    canonical_class_name,
+)
 
-def canonical_class_name(obj):
-    return "{}.{}".format(obj.__class__.__module__, obj.__class__.__qualname__)
-
-NUMPY_EXT_REGISTRY = []
+try_import_numpy = partial(try_import, registry='numpy_ext')
+register_handlers = partial(register_registry_handlers, registry='numpy_ext')
 
 class MaskedArrayHandler(BaseHandler):
     def flatten(self, obj, data):
@@ -38,18 +42,6 @@ class NumpyBoolHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
-def try_import_numpy(mod_name, class_names, handler, base=False):
-    for class_name in class_names:
-        try:
-            mod = __import__(mod_name, fromlist=[class_name])
-            if hasattr(mod, class_name):
-                cls = getattr(mod, class_name)
-                NUMPY_EXT_REGISTRY.append((cls, handler, base))
-        except ImportError:
-            pass
-        except Exception as e:
-            print("Error when importing {}.{}: {} - {}".format(mod_name, class_name, type(e).__name__, e))
-
 try_import_numpy(
     "numpy.ma",
     ["MaskedArray"],
@@ -60,8 +52,3 @@ try_import_numpy(
     ["bool_"],
     NumpyBoolHandler,
 )
-
-def register_handlers():
-    for cls, handler, base in NUMPY_EXT_REGISTRY:
-        register(cls, handler, base=base)
-    return [cls for cls, _, _ in NUMPY_EXT_REGISTRY]

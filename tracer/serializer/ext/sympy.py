@@ -1,21 +1,25 @@
-from jsonpickle.handlers import BaseHandler, register
+from functools import partial
+from jsonpickle.handlers import BaseHandler
+from tracer.serializer.ext.common import (
+    try_import,
+    register_registry_handlers,
+    canonical_class_name,
+)
 
-def canonical_class_name(obj):
-    return "{}.{}".format(obj.__class__.__module__, obj.__class__.__qualname__)
+try_import_sympy = partial(try_import, registry='sympy')
+register_handlers = partial(register_registry_handlers, registry='sympy')
 
 def dict_keys_to_int(d):
     if not isinstance(d, dict):
         return d
     new_dict = {}
-    for k, v in d.items():            
+    for k, v in d.items():
         try:
             int_k = int(k)
         except (ValueError, TypeError):
             int_k = k
         new_dict[int_k] = dict_keys_to_int(v)
     return new_dict
-
-SYMPY_REGISTRY = []
 
 class DomainHandler(BaseHandler):
     def flatten(self, obj, data):
@@ -300,18 +304,6 @@ class BasicHandler(BaseHandler):
         except Exception:
             return obj
 
-def try_import_sympy(mod_name, class_names, handler, base=False):
-    for class_name in class_names:
-        try:
-            mod = __import__(mod_name, fromlist=[class_name])
-            if hasattr(mod, class_name):
-                cls = getattr(mod, class_name)
-                SYMPY_REGISTRY.append((cls, handler, base))
-        except ImportError:
-            pass
-        except Exception as e:
-            print("Error when importing {}.{}: {} - {}".format(mod_name, class_name, type(e).__name__, e))
-
 try_import_sympy(
     "sympy",
     ["Domain"],
@@ -387,8 +379,3 @@ try_import_sympy(
     BasicHandler,
     base=True
 )
-
-def register_handlers():
-    for cls, handler, base in SYMPY_REGISTRY:
-        register(cls, handler, base=base)
-    return [cls for cls, _, _ in SYMPY_REGISTRY]
