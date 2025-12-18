@@ -49,3 +49,9 @@ try_import_sphinx(
     ["Message"],
     MessageHandler,
 )
+try_import_sphinx(
+    "docutils.parsers.rst.states",
+    ["RSTStateMachine", "RSTState", "Inliner", "Body"],
+    PlainHandler,
+    base=True,
+)
