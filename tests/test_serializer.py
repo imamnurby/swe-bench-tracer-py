@@ -263,8 +263,11 @@ def test_sympy_handler():
 def test_sphinx_handler():
     from pathlib import Path
     from sphinx.testing.util import SphinxTestApp
+    from sphinx.ext.autodoc.mock import _MockObject
     app = SphinxTestApp(srcdir=Path(__file__).parent, confdir=Path(__file__).parent)
     assert_equals(serialize(app), {'py/object': 'sphinx.testing.util.SphinxTestApp'})
+    mock_type = type("test", (_MockObject,), {'__module__': 'custom_module', '__name__': 'test2', '__sphinx_decorator_args__': [1, 2, 3]})
+    assert_equals(serialize(mock_type), {'py/type': 'custom_module.test', '__module__': 'custom_module', '__name__': 'test2', '__sphinx_decorator_args__': [1, 2, 3]})
 
 if __name__ == "__main__":
     test_funcs = [obj for name, obj in globals().items() if name.startswith('test_') and callable(obj)]

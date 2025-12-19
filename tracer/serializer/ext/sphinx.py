@@ -1,9 +1,11 @@
 from functools import partial
 
 from jsonpickle.handlers import BaseHandler
+from jsonpickle.util import importable_name
 from tracer.serializer.ext.common import (
     PlainHandler,
     try_import,
+    try_import_type,
     register_registry_handlers,
     canonical_class_name,
 )
@@ -25,6 +27,19 @@ class MessageHandler(BaseHandler):
 
     def restore(self, obj):
         return obj
+
+def mockobject_cls_flattener(cls):
+    cls_name = importable_name(cls)
+    results = {"py/type": cls_name}
+    if cls_name == "sphinx.ext.autodoc.mock._MockObject":
+        return results
+    try:
+        results.update(cls.__dict__)
+        if "__doc__" in results:
+            del results["__doc__"]
+    except Exception:
+        pass
+    return results
 
 try_import_sphinx(
     "sphinx.testing.util",
@@ -58,5 +73,11 @@ try_import_sphinx(
     "docutils.parsers.rst.states",
     ["RSTStateMachine", "RSTState", "Inliner", "Body"],
     PlainHandler,
+    base=True,
+)
+try_import_type(
+    "sphinx.ext.autodoc.mock",
+    ["_MockObject"],
+    mockobject_cls_flattener,
     base=True,
 )
