@@ -5,7 +5,10 @@ import inspect
 import jsonpickle
 
 from collections.abc import Mapping, Sequence, Set
-from tracer.serializer.ext import register_handlers
+from tracer.serializer.ext import (
+    register_handlers,
+    register_type_handlers,
+)
 from tracer.serializer.util import (
     PRIMITIVES,
     safe_hasattr,
@@ -55,6 +58,7 @@ def registry_get_monkey_patch(self):
 jsonpickle.handlers.get = registry_get_monkey_patch(jsonpickle.handlers.registry)
 
 REGISTERED_EXT_TYPES = register_handlers()
+REGISTERED_EXT_CLS_TYPES = register_type_handlers()
 PICKLER = jsonpickle.Pickler(warn=True)
 UNPICKLER = jsonpickle.Unpickler()
 
@@ -79,6 +83,18 @@ def unpickler_restore_function_monkey_patch(self):
 
 UNPICKLER._restore_function = unpickler_restore_function_monkey_patch(UNPICKLER)
 
+def pickler_mktyperef_monkey_patch(obj):
+    for cls, flattener, base in REGISTERED_EXT_CLS_TYPES:
+        if base:
+            if issubclass(obj, cls):
+                return flattener(obj)
+        else:
+            if obj is cls:
+                return flattener(obj)
+    return {jsonpickle.tags.TYPE: jsonpickle.util.importable_name(obj)}
+
+jsonpickle.pickler._mktyperef = pickler_mktyperef_monkey_patch
+
 @isolate_parameters
 @exception_guard
 def serialize(x):
@@ -92,7 +108,7 @@ def serialize(x):
                 return str(x)
         return x
     
-    if isinstance(x, tuple(REGISTERED_EXT_TYPES)):
+    if isinstance(x, (*tuple(REGISTERED_EXT_TYPES), type)):
         return PICKLER.flatten(x)
     
     if isinstance(x, Mapping):
