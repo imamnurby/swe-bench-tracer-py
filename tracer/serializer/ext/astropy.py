@@ -163,6 +163,18 @@ class CompoundModelHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class WCSHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result =  {"py/object": canonical_class_name(obj)}
+        try:
+            result.update(self.context.flatten(obj.__dict__))
+        except Exception:
+            pass
+        return result
+
+    def restore(self, obj):
+        return obj
+
 try_import_astropy(
     "astropy.units", 
     ["UnitBase", "FunctionUnitBase", "StructuredUnit"],
@@ -205,6 +217,7 @@ try_import_astropy(
     "astropy.coordinates",
     ["SkyCoord"],
     GeneralAstropyHandler,
+    base=True,
 )
 try_import_astropy(
     "astropy.coordinates.earth",
@@ -255,4 +268,9 @@ try_import_astropy(
     ["FitsTestCase"],
     PlainHandler,
     base=True,
+)
+try_import_astropy(
+    "astropy.wcs.wcs",
+    ["WCS"],
+    WCSHandler,
 )
