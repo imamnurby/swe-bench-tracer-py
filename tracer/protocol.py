@@ -94,7 +94,13 @@ class LineEvent(Event):
     seen_variables: Dict[str, Any]
 
     def dump(self):
-        return self.model_dump(exclude={
+        if self.function_name.startswith("sklearn"):
+            obj = self.model_copy()
+            if "cachedir" in obj.seen_variables:
+                obj.seen_variables["cachedir"] = "<tmpdir>"
+        else:
+            obj = self
+        return obj.model_dump(exclude={
             "event_id", "event_type", "line_number", "statement", "excluded",
             "vars_defined", "vars_used",
             "control_dependencies", "inherited_control_dependencies",
