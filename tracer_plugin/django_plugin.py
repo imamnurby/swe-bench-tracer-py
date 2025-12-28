@@ -1655,7 +1655,6 @@ def _profile_inspector(frame, event, arg):
             _state.active = False
             _state.tid = None
             _state.inspector = None
-            sys.exit(0)
         return
 
 def _profile_tracker(frame, event, arg):
