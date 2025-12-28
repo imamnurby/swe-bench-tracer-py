@@ -7,6 +7,7 @@ import signal
 import traceback
 import multiprocessing as mp
 
+from queue import Empty
 from tracer.serializer import serialize
 
 __all__ = ['ExpressionInspector', 'encode_expr_list']
@@ -267,14 +268,47 @@ class ExpressionInspector(bdb.Bdb):
         finally:
             signal.alarm(0)
     
-    def eval_expr(self, frame):
+    def eval_expr(self, frame, timeout=60):
         queue = mp.Queue()
-        procs = [mp.Process(target=self.fork_eval, args=(queue, frame, expr, idx))
-                 for idx, expr in enumerate(self.expr)]
-        for p in procs: p.start()
-        for p in procs: p.join()
-        results = [queue.get_nowait() for _ in range(len(self.expr))]
-        results.sort(key=lambda x: x['idx'])
+        procs = []
+        for idx, expr in enumerate(self.expr):
+            p = mp.Process(target=self.fork_eval, args=(queue, frame, expr, idx, timeout))
+            p.start()
+            procs.append(p)
+        results_by_idx = {}
+        for idx, p in enumerate(procs):
+            p.join(timeout)
+            if p.is_alive():
+                p.terminate()
+                p.join()
+                results_by_idx[idx] = {
+                    'idx': idx,
+                    'value': None,
+                    'exception': {
+                        'stage': 'evaluation',
+                        'type': 'TimeoutError',
+                        'message': "Expression evaluation timed out",
+                        'traceback': [],
+                    },
+                }
+        while True:
+            try:
+                result = queue.get_nowait()
+            except Empty:
+                break
+            results_by_idx.setdefault(result['idx'], result)
+        results = []
+        for idx in range(len(self.expr)):
+            results.append(results_by_idx.get(idx, {
+                'idx': idx,
+                'value': None,
+                'exception': {
+                    'stage': 'evaluation',
+                    'type': 'RuntimeError',
+                    'message': "Missing evaluation result",
+                    'traceback': [],
+                },
+            }))
         self.result['value'] = []
         self.result['exception'] = []
         for result in results:
