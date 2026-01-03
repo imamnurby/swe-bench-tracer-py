@@ -52,20 +52,23 @@ class ImmutableListHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
-# class ModelHandler(BaseHandler):
-#     def flatten(self, obj, data):
-#         result = {"py/object": canonical_class_name(obj)}
-#         try:
-#             from django.core.serializers import serialize as django_serialize
-#             result.update({
-#                 "serialized": django_serialize('json', obj.objects.all())
-#             })
-#         except Exception:
-#             pass
-#         return result
+class ModelHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            data = obj.__getstate__()
+            data.pop("_state", None)
+            data.pop("_django_version", None)
+            data.pop("date_joined", None)
+            data.pop("last_login", None)
+            data.pop("password", None)
+            result.update(self.context.flatten(data))
+        except Exception:
+            pass
+        return result
     
-#     def restore(self, obj):
-#         return obj
+    def restore(self, obj):
+        return obj
 
 class DjangoHttpResponseHeadersHandler(BaseHandler):
     HEADER_WHITELIST = (
@@ -131,12 +134,12 @@ try_import_django(
     ["ImmutableList"],
     ImmutableListHandler,
 )
-# try_import_django(
-#     "django.db.models.base",
-#     ["Model"],
-#     ModelHandler,
-#     base=True,
-# )
+try_import_django(
+    "django.db.models.base",
+    ["Model"],
+    ModelHandler,
+    base=True,
+)
 try_import_django(
     "django.db.backends.base.base",
     ["BaseDatabaseWrapper"],
