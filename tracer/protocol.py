@@ -1,3 +1,4 @@
+import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -98,6 +99,46 @@ class LineEvent(Event):
             obj = self.model_copy()
             if "cachedir" in obj.seen_variables:
                 obj.seen_variables["cachedir"] = "<tmpdir>"
+        elif self.function_name.endswith("AdminScriptTestCase.write_settings"):
+            obj = self.model_copy()
+            if "settings_file_path" in obj.seen_variables:
+                var = obj.seen_variables["settings_file_path"]
+                obj.seen_variables["settings_file_path"] = os.path.join("<tmpdir>", os.path.basename(var))
+            if "settings_file" in obj.seen_variables:
+                var = obj.seen_variables["settings_file"]
+                if var and "name" in var:
+                    obj.seen_variables["settings_file"]["name"] = os.path.join("<tmpdir>", os.path.basename(var["name"]))
+        elif self.function_name.endswith("AdminScriptTestCase.run_manage"):
+            obj = self.model_copy()
+            if "test_manage_py" in obj.seen_variables:
+                var = obj.seen_variables["test_manage_py"]
+                obj.seen_variables["test_manage_py"] = os.path.join("<tmpdir>", os.path.basename(var))
+            if "fp" in obj.seen_variables:
+                var = obj.seen_variables["fp"]
+                if var and "name" in var:
+                    obj.seen_variables["fp"]["name"] = os.path.join("<tmpdir>", os.path.basename(var["name"]))
+        elif self.function_name.endswith("AdminScriptTestCase.run_test"):
+            obj = self.model_copy()
+            if "base_dir" in obj.seen_variables:
+                obj.seen_variables["base_dir"] = "<tmpdir>"
+            if "settings_file" in obj.seen_variables:
+                var = obj.seen_variables["settings_file"]
+                if var and "name" in var:
+                    obj.seen_variables["settings_file"]["name"] = os.path.join("<tmpdir>", os.path.basename(var["name"]))
+            if "test_environ" in obj.seen_variables:
+                del obj.seen_variables["test_environ"]
+            if "python_path" in obj.seen_variables:
+                obj.seen_variables["python_path"][0] = "<tmpdir>"
+        elif self.function_name.endswith("Command.collect"):
+            obj = self.model_copy()
+            if "found_files" in obj.seen_variables:
+                del obj.seen_variables["found_files"]
+        elif self.function_name.endswith("AppConfig.default_auto_field"):
+            obj = self.model_copy()
+            if "settings" in obj.seen_variables:
+                var = obj.seen_variables["settings"]
+                if var and "STATIC_ROOT" in var:
+                    obj.seen_variables["settings"]["STATIC_ROOT"] = "<tmpdir>"
         else:
             obj = self
         return obj.model_dump(exclude={
