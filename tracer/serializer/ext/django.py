@@ -165,3 +165,14 @@ try_import_django(
     ["SimpleCookie"],
     PlainHandler,
 )
+try_import_django(
+    "django.core.management.base",
+    ["BaseCommand"],
+    PlainHandler,
+    base=True,
+)
+try_import_django(
+    "django.contrib.staticfiles.storage",
+    ["ManifestStaticFilesStorage"],
+    PlainHandler,
+)
