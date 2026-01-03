@@ -1,7 +1,15 @@
 import os
 import pytest
+import random
 
 from tracer import Tracker, ExecutionTracer, ExpressionInspector
+
+random.seed(42)
+try:
+    import numpy as np
+    np.random.seed(42)
+except ImportError:
+    pass
 
 def get_list_option(value):
     if value is None:

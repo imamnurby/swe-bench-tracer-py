@@ -1,10 +1,18 @@
 import os
 import sys
+import random
 import inspect
 import threading
 
 from functools import partial
 from tracer import Tracker, ExecutionTracer, ExpressionInspector
+
+random.seed(42)
+try:
+    import numpy as np
+    np.random.seed(42)
+except ImportError:
+    pass
 
 _state = threading.local()
 
