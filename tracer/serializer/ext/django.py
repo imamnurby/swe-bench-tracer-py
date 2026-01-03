@@ -117,6 +117,18 @@ class DjangoHttpResponseHeadersHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class ExpressionHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            result.update(self.context.flatten(obj.__getstate__()))
+        except Exception:
+            pass
+        return result
+    
+    def restore(self, obj):
+        return obj
+
 try_import_django(
     "django.core.paginator",
     ["Paginator"],
@@ -178,4 +190,10 @@ try_import_django(
     "django.contrib.staticfiles.storage",
     ["ManifestStaticFilesStorage"],
     PlainHandler,
+)
+try_import_django(
+    "django.db.models.expressions",
+    ["BaseExpression"],
+    ExpressionHandler,
+    base=True,
 )
