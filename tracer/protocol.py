@@ -139,6 +139,13 @@ class LineEvent(Event):
                 var = obj.seen_variables["settings"]
                 if var and "STATIC_ROOT" in var:
                     obj.seen_variables["settings"]["STATIC_ROOT"] = "<tmpdir>"
+        elif self.function_name.endswith("Command.handle"):
+            obj = self.model_copy()
+            if "destination_path" in obj.seen_variables:
+                obj.seen_variables["destination_path"] = "<tmpdir>"
+            if "message" in obj.seen_variables:
+                var = obj.seen_variables["message"]
+                obj.seen_variables["message"][2] = ":\n\n    <tmpdir>\n\n"
         else:
             obj = self
         return obj.model_dump(exclude={
