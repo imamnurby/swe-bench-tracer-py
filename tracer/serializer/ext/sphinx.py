@@ -28,6 +28,20 @@ class MessageHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class EventManagerHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            data = obj.__dict__.copy()
+            data.pop("listeners", None)
+            result.update(self.context.flatten(data))
+        except Exception:
+            pass
+        return result
+
+    def restore(self, obj):
+        return obj
+
 def mockobject_cls_flattener(cls):
     cls_name = importable_name(cls)
     results = {"py/type": cls_name}
@@ -80,4 +94,14 @@ try_import_type(
     ["_MockObject"],
     mockobject_cls_flattener,
     base=True,
+)
+try_import_sphinx(
+    "sphinx.events",
+    ["EventManager"],
+    EventManagerHandler,
+)
+try_import_sphinx(
+    "sphinx.config",
+    ["Config"],
+    PlainHandler,
 )

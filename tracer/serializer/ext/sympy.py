@@ -1,6 +1,7 @@
 from functools import partial
 from jsonpickle.handlers import BaseHandler
 from tracer.serializer.ext.common import (
+    PlainHandler,
     try_import,
     register_registry_handlers,
     canonical_class_name,
@@ -304,6 +305,24 @@ class BasicHandler(BaseHandler):
         except Exception:
             return obj
 
+class UnitSystemHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            data = obj.__dict__.copy()
+            data.pop("_units", None)
+            data.pop("_base_units", None)
+            data.pop("_derived_units", None)
+            data.pop("_quantity_dimension_map", None)
+            data.pop("_quantity_scale_factors", None)
+            result.update(self.context.flatten(data))
+        except Exception:
+            pass
+        return result
+
+    def restore(self, obj):
+        return obj
+
 try_import_sympy(
     "sympy",
     ["Domain"],
@@ -372,6 +391,11 @@ try_import_sympy(
     ["RepMatrix"],
     RepMatrixHandler,
     base=True,
+)
+try_import_sympy(
+    "sympy.physics.units.dimensions",
+    ["DimensionSystem"],
+    PlainHandler,
 )
 try_import_sympy(
     "sympy",
