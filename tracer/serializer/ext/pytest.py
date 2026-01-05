@@ -1,29 +1,24 @@
-from jsonpickle.handlers import BaseHandler, register
+from functools import partial
 
-PYTEST_REGISTRY = []
+from jsonpickle.handlers import BaseHandler
+from tracer.serializer.ext.common import (
+    try_import,
+    register_registry_handlers,
+    canonical_class_name,
+)
 
-def canonical_class_name(obj):
-    return "{}.{}".format(obj.__class__.__module__, obj.__class__.__qualname__)
+try_import_pytest = partial(try_import, registry='pytest')
+register_handlers = partial(register_registry_handlers, registry='pytest')
 
 class PytestPluginManagerHandler(BaseHandler):
     def flatten(self, obj, data):
-        return {"py/object": canonical_class_name(obj)}
-    
-    def restore(self, obj):
-        return obj
-
-class ConfigHandler(BaseHandler):
-    ...
-
-class NodeHandler(BaseHandler):
-    def flatten(self, obj, data):
         result = {"py/object": canonical_class_name(obj)}
         try:
-            result.update({
-                "name": obj.name,
-                "nodeid": obj._nodeid,
-                "path": obj.path,
-            })
+            data = obj.__dict__.copy()
+            data.pop("_name2plugin", None)
+            data.pop("_plugin2hookcallers", None)
+            data.pop("hook", None)
+            result.update(self.context.flatten(data))
         except Exception:
             pass
         return result
@@ -31,19 +26,8 @@ class NodeHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
-def try_import_pytest(mod_name, class_names, handler, base=False):
-    for class_name in class_names:
-        try:
-            mod = __import__(mod_name, fromlist=[class_name])
-            if hasattr(mod, class_name):
-                cls = getattr(mod, class_name)
-                PYTEST_REGISTRY.append((cls, handler, base))
-        except ImportError:
-            pass
-        except Exception as e:
-            print("Error when importing {}.{}: {} - {}".format(mod_name, class_name, type(e).__name__, e))
-
-def register_handlers():
-    for cls, handler, base in PYTEST_REGISTRY:
-        register(cls, handler, base=base)
-    return [cls for cls, _, _ in PYTEST_REGISTRY]
+try_import_pytest(
+    "_pytest.config",
+    ["PytestPluginManager"],
+    PytestPluginManagerHandler,
+)

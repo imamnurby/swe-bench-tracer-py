@@ -62,6 +62,7 @@ class ModelHandler(BaseHandler):
             data.pop("date_joined", None)
             data.pop("last_login", None)
             data.pop("password", None)
+            data.pop("applied", None)
             result.update(self.context.flatten(data))
         except Exception:
             pass
@@ -122,6 +123,21 @@ class ExpressionHandler(BaseHandler):
         result = {"py/object": canonical_class_name(obj)}
         try:
             result.update(self.context.flatten(obj.__getstate__()))
+        except Exception:
+            pass
+        return result
+    
+    def restore(self, obj):
+        return obj
+
+class ParserHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            data = obj.__dict__.copy()
+            data.pop("tags", None)
+            data.pop("filters", None)
+            result.update(self.context.flatten(data))
         except Exception:
             pass
         return result
@@ -196,4 +212,29 @@ try_import_django(
     ["BaseExpression"],
     ExpressionHandler,
     base=True,
+)
+try_import_django(
+    "django.utils.connection",
+    ["ConnectionProxy"],
+    PlainHandler,
+)
+try_import_django(
+    "django.db.utils",
+    ["ConnectionHandler"],
+    PlainHandler,
+)
+try_import_django(
+    "django.template.base",
+    ["Parser"],
+    ParserHandler,
+)
+try_import_django(
+    "django.template.library",
+    ["Library"],
+    PlainHandler,
+)
+try_import_django(
+    "django.template.engine",
+    ["Engine"],
+    PlainHandler,
 )
