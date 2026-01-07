@@ -145,7 +145,8 @@ class LineEvent(Event):
                 obj.seen_variables["destination_path"] = "<tmpdir>"
             if "message" in obj.seen_variables:
                 var = obj.seen_variables["message"]
-                obj.seen_variables["message"][2] = ":\n\n    <tmpdir>\n\n"
+                if isinstance(var, list) and len(var) > 2:
+                    obj.seen_variables["message"][2] = ":\n\n    <tmpdir>\n\n"
         else:
             obj = self
         return obj.model_dump(exclude={
