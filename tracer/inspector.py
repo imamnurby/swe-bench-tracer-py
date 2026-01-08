@@ -188,6 +188,7 @@ class ExpressionInspector(bdb.Bdb):
         self.count = count
         self.mode = mode
         self.bp_func_name = bp_func_name
+        self.source_cache = {}
         self.result = {
             'mode': self.mode,
             'file': bp_file,
@@ -226,7 +227,7 @@ class ExpressionInspector(bdb.Bdb):
     def is_bp_func(self, frame):
         if self.bp_func_name is None:
             return True
-        return get_func_qualname(frame) == self.bp_func_name
+        return get_func_qualname(frame, self.source_cache) == self.bp_func_name
 
     def _init_expr(self, expr):
         if isinstance(expr, list):
