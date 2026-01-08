@@ -45,6 +45,7 @@ def pytest_addoption(parser):
     group.addoption('--expr', default=None)
     group.addoption('--count', type=int, default=1)
     group.addoption('--inspector-mode', choices=['before', 'after'], default='before')
+    group.addoption('--bp-func', default=None)
     # Tracker-specific options
     group.addoption('--use-tracker', action='store_true', default=False)
     # Optional options
@@ -61,6 +62,7 @@ def pytest_configure(config):
     config._expr = config.getoption('--expr')
     config._count = config.getoption('--count')
     config._inspector_mode = config.getoption('--inspector-mode')
+    config._bp_func = config.getoption('--bp-func')
     config._use_tracker = config.getoption('--use-tracker')
     config._test_name = config.getoption('--test-name')
     config._include_stdlib = get_list_option(config.getoption('--include-stdlib'))
@@ -71,8 +73,8 @@ def pytest_configure(config):
 
 def pytest_unconfigure(config):
     del config._mode, config._output, config._disable
-    del config._allowed_functions, config._bp_file
-    del config._bp_line, config._expr, config._count, config._inspector_mode
+    del config._allowed_functions, config._bp_file, config._bp_line
+    del config._expr, config._count, config._inspector_mode, config._bp_func
     del config._use_tracker, config._test_name, config._include_stdlib
 
 @pytest.hookimpl(hookwrapper=True)
@@ -111,6 +113,7 @@ def pytest_runtest_call(item):
             save_path=output_file,
             count=config._count,
             mode=config._inspector_mode,
+            bp_func_name=config._bp_func,
         ):
             outcome = yield
             outcome.force_result(None)

@@ -342,7 +342,8 @@ def _profile_inspector(frame, event, arg):
                     expr=os.environ.get('INSPECTOR_EXPR'),
                     save_path=os.path.join(os.environ.get('INSPECTOR_OUTPUT_DIR'), "{}.jsonl".format(tid)),
                     count=int(os.environ.get('INSPECTOR_COUNT')),
-                    mode=os.environ.get('INSPECTOR_MODE')
+                    mode=os.environ.get('INSPECTOR_MODE'),
+                    bp_func_name=os.environ.get('INSPECTOR_BP_FUNC'),
                 )
                 st.append("root")
                 _state.inspector.set_trace()
