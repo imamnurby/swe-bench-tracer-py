@@ -9,6 +9,7 @@ import multiprocessing as mp
 
 from queue import Empty
 from tracer.serializer import serialize
+from tracer.util import get_func_qualname
 
 __all__ = ['ExpressionInspector', 'encode_expr_list']
 
@@ -75,6 +76,8 @@ class AfterExecution:
         def dispatch_line(dbg, frame):
             if not dbg.break_here(frame):
                 return AfterExecution.Initialized
+            if not dbg.is_bp_func(frame):
+                return AfterExecution.Initialized
             dbg.count -= 1
             if dbg.count > 0:
                 return AfterExecution.Initialized
@@ -84,6 +87,8 @@ class AfterExecution:
         @staticmethod
         def dispatch_return(dbg, frame, return_value):
             if not dbg.break_here(frame):
+                return AfterExecution.Initialized
+            if not dbg.is_bp_func(frame):
                 return AfterExecution.Initialized
             dbg.count -= 1
             if dbg.count > 0:
@@ -130,6 +135,8 @@ class BeforeExecution:
         def dispatch_line(dbg, frame):
             if not dbg.break_here(frame):
                 return BeforeExecution.Initialized
+            if not dbg.is_bp_func(frame):
+                return BeforeExecution.Initialized
             dbg.count -= 1
             if dbg.count > 0:
                 return BeforeExecution.Initialized
@@ -139,6 +146,8 @@ class BeforeExecution:
         @staticmethod
         def dispatch_return(dbg, frame, return_value):
             if not dbg.break_here(frame):
+                return BeforeExecution.Initialized
+            if not dbg.is_bp_func(frame):
                 return BeforeExecution.Initialized
             dbg.count -= 1
             if dbg.count > 0:
@@ -166,9 +175,11 @@ class BeforeExecution:
             return Completed
 
 class ExpressionInspector(bdb.Bdb):
-    def __init__(self, bp_file, bp_line, expr, save_path=None, count=1, mode='before'):
+    def __init__(self, bp_file, bp_line, expr, save_path=None, count=1, mode='before', bp_func_name=None):
         super().__init__()
         assert os.path.isabs(bp_file), "bp_file must be an absolute path"
+        assert os.path.exists(bp_file), "bp_file must exist"
+        assert bp_line > 0, "bp_line must be positive"
         assert count > 0, "count must be positive"
         assert mode in ['before', 'after'], "mode must be 'before' or 'after'"
         self.state = get_initial_state(mode)
@@ -176,6 +187,7 @@ class ExpressionInspector(bdb.Bdb):
         self.save_path = save_path
         self.count = count
         self.mode = mode
+        self.bp_func_name = bp_func_name
         self.result = {
             'mode': self.mode,
             'file': bp_file,
@@ -210,6 +222,11 @@ class ExpressionInspector(bdb.Bdb):
     
     def user_exception(self, frame, exc_info):
         self.state = self.state.dispatch_exception(self, frame, exc_info)
+    
+    def is_bp_func(self, frame):
+        if self.bp_func_name is None:
+            return True
+        return get_func_qualname(frame) == self.bp_func_name
 
     def _init_expr(self, expr):
         if isinstance(expr, list):
