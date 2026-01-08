@@ -145,6 +145,20 @@ class ParserHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class FieldHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            data = obj.__dict__.copy()
+            data.pop("_get_default", None)
+            result.update(self.context.flatten(data))
+        except Exception:
+            pass
+        return result
+    
+    def restore(self, obj):
+        return obj
+
 try_import_django(
     "django.core.paginator",
     ["Paginator"],
@@ -237,4 +251,10 @@ try_import_django(
     "django.template.engine",
     ["Engine"],
     PlainHandler,
+)
+try_import_django(
+    "django.db.models.fields",
+    ["Field"],
+    FieldHandler,
+    base=True,
 )
