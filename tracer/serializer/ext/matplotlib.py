@@ -11,6 +11,7 @@ register_handlers = partial(register_registry_handlers, registry='matplotlib')
 
 try_import_matplotlib(
     "matplotlib.transforms",
-    ["Bbox"],
+    ["BboxBase"],
     PlainHandler,
+    base=True,
 )
