@@ -170,13 +170,6 @@ class SafeMIMETextHandler(BaseHandler):
             result["content_subtype"] = obj.get_content_subtype()
         except Exception:
             pass
-        try:
-            wire = obj.as_bytes()
-            result["rendered"] = {
-                "length_bytes": len(wire),
-            }
-        except Exception:
-            pass
         return result
 
 try_import_django(
