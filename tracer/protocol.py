@@ -182,6 +182,10 @@ class LineEvent(Event):
             obj = self.model_copy()
             if "memodict" in obj.seen_variables:
                 del obj.seen_variables["memodict"]
+        elif self.function_name.endswith("Catalog.__iter__"):
+            obj = self.model_copy()
+            if "uuids" in obj.seen_variables:
+                del obj.seen_variables["uuids"]
         else:
             obj = self
         if obj.seen_variables:
