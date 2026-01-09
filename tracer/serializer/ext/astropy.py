@@ -175,6 +175,25 @@ class WCSHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class NdarrayMixinHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            import numpy as np
+            result.update(
+                self.context.flatten({
+                    "base": np.array(obj),
+                    "dtype": obj.dtype,
+                    "shape": obj.shape,
+                })
+            )
+            return result
+        except Exception:
+            pass
+
+    def restore(self, obj):
+        return obj
+
 try_import_astropy(
     "astropy.units", 
     ["UnitBase", "FunctionUnitBase", "StructuredUnit"],
@@ -200,6 +219,11 @@ try_import_astropy(
     "astropy.coordinates.earth",
     ["EarthLocationInfo"],
     DataInfoHandler,
+)
+try_import_astropy(
+    "astropy.table.ndarray_mixin",
+    ["NdarrayMixin"],
+    NdarrayMixinHandler,
 )
 try_import_astropy(
     "astropy.units", 
