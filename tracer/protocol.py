@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
-REPR_PATTERN = re.compile(r'<[^>]+? (?:object|function) at 0x[0-9a-fA-F]+>')
+REPR_PATTERN = re.compile(r'<(?P<object>[^>]+?) at 0x[0-9a-fA-F]+>')
 
 def sanitize_repr_address(value: str) -> str:
     def _strip_address(match: re.Match) -> str:
@@ -29,6 +29,18 @@ def drop_numeric_keys(obj: Any) -> Any:
         return cleaned
     if isinstance(obj, list):
         return [drop_numeric_keys(item) for item in obj]
+    return obj
+
+VOLATILE_STATE_KEYS = {"_cid_gen", "_id_gen", "_counter", "_next_id"}
+
+def scrub_py_state(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        if "py/state" in obj and isinstance(obj["py/state"], dict):
+            for k in VOLATILE_STATE_KEYS:
+                obj["py/state"].pop(k, None)
+        return {k: scrub_py_state(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [scrub_py_state(v) for v in obj]
     return obj
 
 class Event(BaseModel):
@@ -174,6 +186,7 @@ class LineEvent(Event):
             obj = self
         if obj.seen_variables:
             obj.seen_variables = drop_numeric_keys(obj.seen_variables)
+            obj.seen_variables = scrub_py_state(obj.seen_variables)
         return obj.model_dump(exclude={
             "event_id", "event_type", "line_number", "statement", "excluded",
             "vars_defined", "vars_used",
