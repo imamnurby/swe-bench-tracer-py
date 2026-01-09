@@ -147,6 +147,10 @@ class LineEvent(Event):
                 var = obj.seen_variables["message"]
                 if isinstance(var, list) and len(var) > 2:
                     obj.seen_variables["message"][2] = ":\n\n    <tmpdir>\n\n"
+        elif self.function_name.endswith("Field.__deepcopy__"):
+            obj = self.model_copy()
+            if "memodict" in obj.seen_variables:
+                del obj.seen_variables["memodict"]
         else:
             obj = self
         return obj.model_dump(exclude={
