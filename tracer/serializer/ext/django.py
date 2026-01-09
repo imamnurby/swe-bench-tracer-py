@@ -172,6 +172,9 @@ class SafeMIMETextHandler(BaseHandler):
             pass
         return result
 
+    def restore(self, obj):
+        return obj
+
 try_import_django(
     "django.core.paginator",
     ["Paginator"],
