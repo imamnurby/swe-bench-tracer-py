@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
-REPR_PATTERN = re.compile(r'<(?P<object>[^>]+?) at 0x[0-9a-fA-F]+>')
+REPR_PATTERN = re.compile(r'<(?P<object>.+?)(?:\s+at\s+)?(?:0x|x)[0-9a-fA-F]+>')
 
 def sanitize_repr_address(value: str) -> str:
     def _strip_address(match: re.Match) -> str:
@@ -186,6 +186,19 @@ class LineEvent(Event):
             obj = self.model_copy()
             if "uuids" in obj.seen_variables:
                 del obj.seen_variables["uuids"]
+        elif self.function_name.endswith("_pytest.runner:pytest_runtest_call"):
+            obj = self.model_copy()
+            if "e" in obj.seen_variables:
+                try:
+                    var = obj.seen_variables["e"]['py/reduce'][1]['py/tuple'][0]
+                    if isinstance(var, str):
+                        obj.seen_variables["e"]['py/reduce'][1]['py/tuple'][0] = sanitize_repr_address(var)
+                except KeyError:
+                    pass
+        elif self.function_name.endswith("test_mark_mro"):
+            obj = self.model_copy()
+            if "get_unpacked_marks" in obj.seen_variables:
+                del obj.seen_variables["get_unpacked_marks"]
         else:
             obj = self
         if obj.seen_variables:
