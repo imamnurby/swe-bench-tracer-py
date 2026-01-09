@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
-REPR_PATTERN = re.compile(r'<(?P<object>[^>]+?) object at 0x[0-9a-fA-F]+>')
+REPR_PATTERN = re.compile(r'<[^>]+? (?:object|function) at 0x[0-9a-fA-F]+>')
 
 def sanitize_repr_address(value: str) -> str:
     def _strip_address(match: re.Match) -> str:
