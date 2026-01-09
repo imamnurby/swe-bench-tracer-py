@@ -77,6 +77,7 @@ try_import_sphinx(
     "sphinx.builders",
     ["Builder"],
     PlainHandler,
+    base=True,
 )
 try_import_sphinx(
     "sphinx.builders.gettext",
@@ -103,5 +104,10 @@ try_import_sphinx(
 try_import_sphinx(
     "sphinx.config",
     ["Config"],
+    PlainHandler,
+)
+try_import_sphinx(
+    "sphinx.environment",
+    ["BuildEnvironment"],
     PlainHandler,
 )

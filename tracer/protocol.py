@@ -199,6 +199,20 @@ class LineEvent(Event):
             obj = self.model_copy()
             if "get_unpacked_marks" in obj.seen_variables:
                 del obj.seen_variables["get_unpacked_marks"]
+        elif self.function_name.endswith("test_raises_for_invalid_status"):
+            obj = self.model_copy()
+            if "server_thread" in obj.seen_variables:
+                var = obj.seen_variables["server_thread"]
+                if "_ident" in var:
+                    obj.seen_variables["server_thread"]["_ident"] = "<thread_ident>"
+                if "_native_id" in var:
+                    obj.seen_variables["server_thread"]["_native_id"] = "<native_thread_id>"
+        elif self.function_name.endswith("Builder.read_doc"):
+            obj = self.model_copy()
+            try:
+                del obj.seen_variables['doctree']['py/state']['settings']['env']['py/state']['all_docs']['index']
+            except KeyError:
+                pass
         else:
             obj = self
         if obj.seen_variables:
