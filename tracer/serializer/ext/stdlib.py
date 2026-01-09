@@ -73,6 +73,15 @@ class UUIDHandler(BaseHandler):
 
 class DatetimeHandler(BaseHandler):
     def flatten(self, obj, data):
+        # if obj is today, usually means some timestamp
+        # we need to sanitize the hour, minute, second, microsecond
+        now = datetime.datetime.now(tz=obj.tzinfo)
+        if (
+            now.year == obj.year and
+            now.month == obj.month and
+            now.day == obj.day
+        ):
+            obj = obj.replace(hour=0, minute=0, second=0, microsecond=0)
         return {
             "py/object": "datetime.datetime",
             "year": obj.year,
