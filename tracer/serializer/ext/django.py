@@ -186,22 +186,6 @@ class QuerySetHandler(BaseHandler):
             result["db"] = obj.db
         except Exception:
             pass
-
-        try:
-            q = obj.query
-            result["low_mark"] = getattr(q, "low_mark", None)
-            result["high_mark"] = getattr(q, "high_mark", None)
-
-            ob = list(getattr(q, "order_by", ()) or ())
-            if ob:
-                result["order_by"] = ob
-
-            if getattr(q, "distinct", False):
-                result["distinct"] = True
-
-        except Exception:
-            pass
-
         return result
 
     def restore(self, obj):
