@@ -12,6 +12,25 @@ def sanitize_repr_address(value: str) -> str:
 
     return REPR_PATTERN.sub(_strip_address, value)
 
+def _is_pure_number_key(key: Any) -> bool:
+    if isinstance(key, int):
+        return True
+    if isinstance(key, str):
+        return key.isdigit()
+    return False
+
+def drop_numeric_keys(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        cleaned: Dict[Any, Any] = {}
+        for key, value in obj.items():
+            if _is_pure_number_key(key):
+                continue
+            cleaned[key] = drop_numeric_keys(value)
+        return cleaned
+    if isinstance(obj, list):
+        return [drop_numeric_keys(item) for item in obj]
+    return obj
+
 class Event(BaseModel):
     event_id: int
     event_type: str
@@ -153,6 +172,8 @@ class LineEvent(Event):
                 del obj.seen_variables["memodict"]
         else:
             obj = self
+        if obj.seen_variables:
+            obj.seen_variables = drop_numeric_keys(obj.seen_variables)
         return obj.model_dump(exclude={
             "event_id", "event_type", "line_number", "statement", "excluded",
             "vars_defined", "vars_used",
