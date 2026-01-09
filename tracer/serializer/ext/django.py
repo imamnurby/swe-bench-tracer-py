@@ -159,6 +159,26 @@ class FieldHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class SafeMIMETextHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            result["content_type"] = obj.get_content_type()
+        except Exception:
+            pass
+        try:
+            result["content_subtype"] = obj.get_content_subtype()
+        except Exception:
+            pass
+        try:
+            wire = obj.as_bytes()
+            result["rendered"] = {
+                "length_bytes": len(wire),
+            }
+        except Exception:
+            pass
+        return result
+
 try_import_django(
     "django.core.paginator",
     ["Paginator"],
@@ -257,4 +277,10 @@ try_import_django(
     ["Field"],
     FieldHandler,
     base=True,
+)
+
+try_import_django(
+    "django.core.mail.message",
+    ["SafeMIMEText"],
+    SafeMIMETextHandler,
 )
