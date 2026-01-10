@@ -59,7 +59,7 @@ jsonpickle.handlers.get = registry_get_monkey_patch(jsonpickle.handlers.registry
 
 REGISTERED_EXT_TYPES = register_handlers()
 REGISTERED_EXT_CLS_TYPES = register_type_handlers()
-PICKLER = jsonpickle.Pickler(warn=True)
+PICKLER = jsonpickle.Pickler(warn=True, make_refs=False, max_depth=20)
 UNPICKLER = jsonpickle.Unpickler()
 
 def pickler_flatten_function_monkey_patch(self):
