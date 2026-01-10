@@ -101,7 +101,8 @@ class ReturnEvent(Event):
     return_value: Any
 
     def dump(self):
-        return self.model_dump(exclude={
+        copied = self.model_copy(update={"return_value": drop_numeric_keys(self.return_value)})
+        return copied.model_dump(exclude={
             "event_id", "event_type", "line_number", "statement", "excluded",
             "vars_used", "caller_name",
         })
