@@ -323,6 +323,19 @@ class UnitSystemHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class VectorHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            if hasattr(obj, "args"):
+                result["args"] = self.context.flatten(obj.args)
+        except Exception:
+            pass
+        return result
+    
+    def restore(self, obj):
+        return obj
+
 try_import_sympy(
     "sympy",
     ["Domain"],
@@ -402,4 +415,9 @@ try_import_sympy(
     ["Basic",],
     BasicHandler,
     base=True
+)
+try_import_sympy(
+    "sympy.physics.vector.vector",
+    ["Vector"],
+    VectorHandler,
 )

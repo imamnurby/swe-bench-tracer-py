@@ -15,3 +15,9 @@ try_import_matplotlib(
     PlainHandler,
     base=True,
 )
+try_import_matplotlib(
+    "matplotlib.axis",
+    ["Axis"],
+    PlainHandler,
+    base=True,
+)

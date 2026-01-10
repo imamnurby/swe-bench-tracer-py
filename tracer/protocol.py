@@ -5,12 +5,19 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
 REPR_PATTERN = re.compile(r'<(?P<object>.+?)(?:\s+at\s+)?(?:0x|x)[0-9a-fA-F]+>')
+TIMESTAMP_PATTERN = re.compile(
+    r'\b\d{4}-\d{2}-\d{2} '
+    r'\d{2}:\d{2}:\d{2}'
+    r'(?:\.\d{1,6})?\b'
+)
 
-def sanitize_repr_address(value: str) -> str:
+def sanitize_exc_msg(value: str) -> str:
     def _strip_address(match: re.Match) -> str:
         return f"<{match.group('object')}>"
 
-    return REPR_PATTERN.sub(_strip_address, value)
+    value = REPR_PATTERN.sub(_strip_address, value)
+    value = TIMESTAMP_PATTERN.sub("<timestamp>", value)
+    return value
 
 def _is_pure_number_key(key: Any) -> bool:
     if isinstance(key, int):
@@ -113,7 +120,7 @@ class ExceptionEvent(Event):
     vars_used: Optional[List[str]] = None
 
     def dump(self):
-        copied = self.model_copy(update={"exception_value": sanitize_repr_address(self.exception_value)})
+        copied = self.model_copy(update={"exception_value": sanitize_exc_msg(self.exception_value)})
         return copied.model_dump(exclude={
             "event_id", "event_type", "line_number", "statement", "excluded",
             "vars_used",
@@ -193,7 +200,7 @@ class LineEvent(Event):
                 try:
                     var = obj.seen_variables["e"]['py/reduce'][1]['py/tuple'][0]
                     if isinstance(var, str):
-                        obj.seen_variables["e"]['py/reduce'][1]['py/tuple'][0] = sanitize_repr_address(var)
+                        obj.seen_variables["e"]['py/reduce'][1]['py/tuple'][0] = sanitize_exc_msg(var)
                 except KeyError:
                     pass
         elif self.function_name.endswith("test_mark_mro"):
@@ -219,6 +226,22 @@ class LineEvent(Event):
             if "to_handle" in obj.seen_variables:
                 if isinstance(obj.seen_variables["to_handle"], list):
                     obj.seen_variables["to_handle"] = sorted(obj.seen_variables["to_handle"])
+        elif self.function_name.endswith("TestDataset.test_chunks_does_not_load_data"):
+            obj = self.model_copy()
+            if "store" in obj.seen_variables:
+                del obj.seen_variables["store"]
+        elif self.function_name.endswith("CDS._make_parser"):
+            obj = self.model_copy()
+            if "p_division_of_units" in obj.seen_variables:
+                var = obj.seen_variables["p_division_of_units"]
+                if "__doc__" in var:
+                    obj.seen_variables["p_division_of_units"]["__doc__"] = "<docstring>"
+        elif self.function_name.endswith("Store.get") or self.function_name.endswith("Store.__getitem__") or self.function_name.endswith("Store.__setitem__"):
+            obj = self.model_copy()
+            if "self" in obj.seen_variables:
+                var = obj.seen_variables["self"]
+                if "_store" in var and isinstance(var["_store"], dict):
+                    obj.seen_variables["self"]["_store"] = {sanitize_exc_msg(str(k)): v for k, v in var["_store"].items()}
         else:
             obj = self
         if obj.seen_variables:

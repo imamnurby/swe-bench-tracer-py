@@ -2,6 +2,7 @@ import io
 import uuid
 import types
 import socket
+import asyncio
 import decimal
 import datetime
 import threading
@@ -75,11 +76,15 @@ class DatetimeHandler(BaseHandler):
     def flatten(self, obj, data):
         # if obj is today, usually means some timestamp
         # we need to sanitize the hour, minute, second, microsecond
+        # SPECIAL CASE: django tests use previous day and next day
         now = datetime.datetime.now(tz=obj.tzinfo)
         if (
             now.year == obj.year and
             now.month == obj.month and
-            now.day == obj.day
+            (
+                now.day == obj.day or
+                abs(now.day - obj.day) == 1
+            )
         ):
             obj = obj.replace(hour=0, minute=0, second=0, microsecond=0)
         return {
@@ -144,6 +149,18 @@ class ConditionHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class FutureHandler(BaseHandler):
+    def flatten(self, obj, data):
+        return {
+            "py/object": "asyncio.Future",
+            "_state": obj._state,
+            "_blocking": obj._blocking,
+            "_asyncio_future_blocking": obj._asyncio_future_blocking,
+        }
+    
+    def restore(self, obj):
+        return obj
+
 def register_handlers():
     register(type(iter([])), IteratorHandler)
     register(types.GeneratorType, GeneratorHandler)
@@ -157,9 +174,10 @@ def register_handlers():
     register(datetime.date, DateHandler)
     register(datetime.time, TimeHandler)
     register(threading.Condition, ConditionHandler)
+    register(asyncio.Future, FutureHandler)
     return [
         type(iter([])), types.GeneratorType, io.IOBase,
         io.TextIOWrapper, socket.socket, decimal.Decimal, property,
         uuid.UUID, datetime.datetime, datetime.date, datetime.time,
-        threading.Condition,
+        threading.Condition, asyncio.Future,
     ]

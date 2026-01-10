@@ -191,6 +191,19 @@ class QuerySetHandler(BaseHandler):
     def restore(self, obj):
         return obj
 
+class PromiseHandler(BaseHandler):
+    def flatten(self, obj, data):
+        result = {"py/object": canonical_class_name(obj)}
+        try:
+            data = obj.__dict__.copy()
+            result.update(self.context.flatten(data))
+        except Exception:
+            pass
+        return result
+
+    def restore(self, obj):
+        return obj
+
 try_import_django(
     "django.db.models.query",
     ["QuerySet"],
@@ -300,4 +313,10 @@ try_import_django(
     "django.core.mail.message",
     ["SafeMIMEText"],
     SafeMIMETextHandler,
+)
+try_import_django(
+    "django.utils.functional",
+    ["Promise"],
+    PromiseHandler,
+    base=True,
 )
