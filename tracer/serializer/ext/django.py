@@ -32,7 +32,7 @@ class DjangoSimpleTestCaseHandler(BaseHandler):
         result = {"py/object": canonical_class_name(obj)}
         try:
             result.update({
-                "client": self.context.flatten(obj.client),
+                "client": self.context.flatten(obj.client, reset=False),
             })
         except Exception:
             pass
@@ -44,7 +44,7 @@ class DjangoSimpleTestCaseHandler(BaseHandler):
 class ImmutableListHandler(BaseHandler):
     def flatten(self, obj, data):
         try:
-            result = self.context.flatten(list(obj))
+            result = self.context.flatten(list(obj), reset=False)
         except Exception:
             result = {"py/object": canonical_class_name(obj)}
         return result
@@ -63,7 +63,7 @@ class ModelHandler(BaseHandler):
             data.pop("last_login", None)
             data.pop("password", None)
             data.pop("applied", None)
-            result.update(self.context.flatten(data))
+            result.update(self.context.flatten(data, reset=False))
         except Exception:
             pass
         return result
@@ -122,7 +122,7 @@ class ExpressionHandler(BaseHandler):
     def flatten(self, obj, data):
         result = {"py/object": canonical_class_name(obj)}
         try:
-            result.update(self.context.flatten(obj.__getstate__()))
+            result.update(self.context.flatten(obj.__getstate__(), reset=False))
         except Exception:
             pass
         return result
@@ -137,7 +137,7 @@ class ParserHandler(BaseHandler):
             data = obj.__dict__.copy()
             data.pop("tags", None)
             data.pop("filters", None)
-            result.update(self.context.flatten(data))
+            result.update(self.context.flatten(data, reset=False))
         except Exception:
             pass
         return result
@@ -151,7 +151,7 @@ class FieldHandler(BaseHandler):
         try:
             data = obj.__dict__.copy()
             data.pop("_get_default", None)
-            result.update(self.context.flatten(data))
+            result.update(self.context.flatten(data, reset=False))
         except Exception:
             pass
         return result
@@ -196,7 +196,7 @@ class PromiseHandler(BaseHandler):
         result = {"py/object": canonical_class_name(obj)}
         try:
             data = obj.__dict__.copy()
-            result.update(self.context.flatten(data))
+            result.update(self.context.flatten(data, reset=False))
         except Exception:
             pass
         return result

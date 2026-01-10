@@ -17,7 +17,7 @@ class MaskedArrayHandler(BaseHandler):
                 "data": obj.data.tolist(),
                 "mask": obj.mask.tolist(),
                 "fill_value": obj.fill_value.tolist(),
-                "dtype": self.context.flatten(obj.dtype),
+                "dtype": self.context.flatten(obj.dtype, reset=False),
             })
         except Exception:
             pass

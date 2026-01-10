@@ -18,7 +18,7 @@ class PytestPluginManagerHandler(BaseHandler):
             data.pop("_name2plugin", None)
             data.pop("_plugin2hookcallers", None)
             data.pop("hook", None)
-            result.update(self.context.flatten(data))
+            result.update(self.context.flatten(data, reset=False))
         except Exception:
             pass
         return result

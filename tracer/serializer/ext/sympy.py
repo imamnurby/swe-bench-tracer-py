@@ -73,8 +73,8 @@ class FloatHandler(BaseHandler):
         result = {"py/object": canonical_class_name(obj)}
         try:
             result.update({
-                "_mpf_": self.context.flatten(obj._mpf_),
-                "_prec": self.context.flatten(obj._prec),
+                "_mpf_": self.context.flatten(obj._mpf_, reset=False),
+                "_prec": self.context.flatten(obj._prec, reset=False),
             })
         except Exception:
             pass
@@ -127,7 +127,7 @@ class SymbolHandler(BaseHandler):
         try:
             result.update({
                 "name": obj.name,
-                "_assumptions_orig": self.context.flatten(obj._assumptions_orig),
+                "_assumptions_orig": self.context.flatten(obj._assumptions_orig, reset=False),
             })
         except Exception:
             pass
@@ -146,7 +146,7 @@ class MatrixSymbolHandler(BaseHandler):
         try:
             result.update({
                 "name": obj.name,
-                "shape": [self.context.flatten(dim) for dim in obj.shape],
+                "shape": [self.context.flatten(dim, reset=False) for dim in obj.shape],
             })
         except Exception:
             pass
@@ -193,9 +193,9 @@ class DMPHandler(BaseHandler):
         if result["py/object"] == 'sympy.polys.polyclasses.DMP_Python':
             try:
                 result.update({
-                    "_rep": self.context.flatten(obj._rep),
-                    "dom": self.context.flatten(obj.dom),
-                    "lev": self.context.flatten(obj.lev),
+                    "_rep": self.context.flatten(obj._rep, reset=False),
+                    "dom": self.context.flatten(obj.dom, reset=False),
+                    "lev": self.context.flatten(obj.lev, reset=False),
                 })
             except Exception:
                 pass
@@ -218,8 +218,8 @@ class PolyHandler(BaseHandler):
         result = {"py/object": canonical_class_name(obj)}
         try:
             result.update({
-                "rep": self.context.flatten(obj.rep),
-                "gens": [self.context.flatten(gen) for gen in obj.gens],
+                "rep": self.context.flatten(obj.rep, reset=False),
+                "gens": [self.context.flatten(gen, reset=False) for gen in obj.gens],
             })
         except Exception:
             pass
@@ -242,9 +242,9 @@ class DomainMatrixHandler(BaseHandler):
         result = {"py/object": canonical_class_name(obj)}
         try:
             result.update({
-                "rep": self.context.flatten(obj.rep),
-                "shape": self.context.flatten([self.context.flatten(dim) for dim in obj.shape]),
-                "domain": self.context.flatten(obj.domain),
+                "rep": self.context.flatten(obj.rep, reset=False),
+                "shape": self.context.flatten([self.context.flatten(dim, reset=False) for dim in obj.shape], reset=False),
+                "domain": self.context.flatten(obj.domain, reset=False),
             })
         except Exception:
             pass
@@ -266,7 +266,7 @@ class RepMatrixHandler(BaseHandler):
         result = {"py/object": canonical_class_name(obj)}
         try:
             result.update({
-                "_rep": self.context.flatten(obj._rep),
+                "_rep": self.context.flatten(obj._rep, reset=False),
             })
         except Exception:
             pass
@@ -289,7 +289,7 @@ class BasicHandler(BaseHandler):
     def flatten(self, obj, data):
         result = {"py/object": canonical_class_name(obj)}
         try:
-            result.update({"args": [self.context.flatten(arg) for arg in obj.args]})
+            result.update({"args": [self.context.flatten(arg, reset=False) for arg in obj.args]})
         except Exception:
             pass
         return result
@@ -315,7 +315,7 @@ class UnitSystemHandler(BaseHandler):
             data.pop("_derived_units", None)
             data.pop("_quantity_dimension_map", None)
             data.pop("_quantity_scale_factors", None)
-            result.update(self.context.flatten(data))
+            result.update(self.context.flatten(data, reset=False))
         except Exception:
             pass
         return result
@@ -328,7 +328,7 @@ class VectorHandler(BaseHandler):
         result = {"py/object": canonical_class_name(obj)}
         try:
             if hasattr(obj, "args"):
-                result["args"] = self.context.flatten(obj.args)
+                result["args"] = self.context.flatten(obj.args, reset=False)
         except Exception:
             pass
         return result

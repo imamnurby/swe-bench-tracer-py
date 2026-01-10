@@ -19,7 +19,7 @@ class MessageHandler(BaseHandler):
         try:
             results.update({
                 "text": obj.text,
-                "locations": self.context.flatten(obj.locations),
+                "locations": self.context.flatten(obj.locations, reset=False),
             })
         except Exception:
             pass
@@ -34,7 +34,7 @@ class EventManagerHandler(BaseHandler):
         try:
             data = obj.__dict__.copy()
             data.pop("listeners", None)
-            result.update(self.context.flatten(data))
+            result.update(self.context.flatten(data, reset=False))
         except Exception:
             pass
         return result

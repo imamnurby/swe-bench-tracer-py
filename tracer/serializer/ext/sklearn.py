@@ -15,7 +15,7 @@ class BaseSearchCVHandler(PlainHandler):
         try:
             data = obj.__dict__.copy()
             data["refit_time_"] = "<omitted-by-serializer>"
-            serialized = self.context.flatten(data)
+            serialized = self.context.flatten(data, reset=False)
             if "cv_results_" in serialized and isinstance(serialized["cv_results_"], dict):
                 serialized["cv_results_"].pop("mean_fit_time", None)
                 serialized["cv_results_"].pop("std_fit_time", None)
@@ -42,9 +42,9 @@ class IsolationForestHandler(PlainHandler):
                 "oob_score": obj.oob_score,
                 "warm_start": obj.warm_start,
                 "verbose": obj.verbose,
-            }))
+            }, reset=False))
             if hasattr(obj, "offset_"):
-                result["offset_"] =self.context.flatten(obj.offset_)
+                result["offset_"] =self.context.flatten(obj.offset_, reset=False)
         except Exception:
             pass
         return result

@@ -14,7 +14,7 @@ class VariableHandler(BaseHandler):
     def flatten(self, obj, data):
         results = {"py/object": canonical_class_name(obj)}
         try:
-            results.update(self.context.flatten(obj.to_dict()))
+            results.update(self.context.flatten(obj.to_dict(), reset=False))
         except Exception:
             pass
         return results
@@ -31,7 +31,7 @@ class DataArrayHandler(BaseHandler):
                 "_coords": obj._coords,
                 "_name": obj._name,
                 "_indexes": obj._indexes,
-            }))
+            }, reset=False))
         except Exception:
             pass
         return results
@@ -50,7 +50,7 @@ class TestDataArrayHandler(BaseHandler):
                 "va": 'initialized with `Variable(["x", "y"], self.x, self.attrs)`',
                 "ds": 'initialized with `Dataset({"foo": self.v})`',
                 "dv": 'initialized with `self.ds["foo"]`'
-            }))
+            }, reset=False))
         except Exception:
             pass
         return results

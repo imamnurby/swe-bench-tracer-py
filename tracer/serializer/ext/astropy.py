@@ -36,7 +36,7 @@ class DataInfoHandler(BaseHandler):
         result = {"py/object": canonical_class_name(obj)}
         try:
             result.update(
-                self.context.flatten(obj._represent_as_dict())
+                self.context.flatten(obj._represent_as_dict(), reset=False)
             )
         except (AttributeError, KeyError, TypeError):
             pass
@@ -50,7 +50,7 @@ class GeneralAstropyHandler(BaseHandler):
         result =  {"py/object": canonical_class_name(obj)}
         try:
             result.update(
-                self.context.flatten(obj.info._represent_as_dict())
+                self.context.flatten(obj.info._represent_as_dict(), reset=False)
             )
         except (AttributeError, KeyError, TypeError):
             pass
@@ -69,7 +69,7 @@ class ColumnHandler(BaseHandler):
                     "name": obj.name,
                     "unit": obj.unit,
                     "format": obj.format, 
-                })
+                }, reset=False)
             )
         except AttributeError:
             pass
@@ -85,7 +85,7 @@ class RowHandler(BaseHandler):
             result.update(
                 self.context.flatten({
                     "data": obj.__array__(),
-                })
+                }, reset=False)
             )
         except AttributeError:
             pass
@@ -105,7 +105,7 @@ class TableHandler(BaseHandler):
                 self.context.flatten({
                     "columns": obj.columns,
                     "masked": obj.masked,
-                })
+                }, reset=False)
             )
         except AttributeError:
             pass
@@ -121,7 +121,7 @@ class TimeSeriesHandler(BaseHandler):
             result.update(
                 self.context.flatten({
                     "time": obj.time,
-                })
+                }, reset=False)
             )
         except Exception:
             pass
@@ -154,7 +154,7 @@ class CompoundModelHandler(BaseHandler):
                     "param_names": obj.param_names,
                     "n_inputs": obj.n_inputs,
                     "n_outputs": obj.n_outputs,
-                })
+                }, reset=False)
             )
         except Exception:
             pass
@@ -167,7 +167,7 @@ class WCSHandler(BaseHandler):
     def flatten(self, obj, data):
         result =  {"py/object": canonical_class_name(obj)}
         try:
-            result.update(self.context.flatten(obj.__dict__))
+            result.update(self.context.flatten(obj.__dict__, reset=False))
         except Exception:
             pass
         return result
@@ -185,7 +185,7 @@ class NdarrayMixinHandler(BaseHandler):
                     "base": np.array(obj),
                     "dtype": obj.dtype,
                     "shape": obj.shape,
-                })
+                }, reset=False)
             )
             return result
         except Exception:

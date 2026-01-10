@@ -60,7 +60,7 @@ class PropertyHandler(BaseHandler):
         fn = obj.fget
         if fn:
             fn.__doc__ = obj.__doc__
-        return self.context.flatten(fn)
+        return self.context.flatten(fn, reset=False)
     
     def restore(self, obj):
         return obj
@@ -96,7 +96,7 @@ class DatetimeHandler(BaseHandler):
             "minute": obj.minute,
             "second": obj.second,
             "microsecond": obj.microsecond,
-            "tzinfo": self.context.flatten(obj.tzinfo),
+            "tzinfo": self.context.flatten(obj.tzinfo, reset=False),
             "fold": obj.fold
         }
     
@@ -127,7 +127,7 @@ class TimeHandler(BaseHandler):
             "minute": obj.minute,
             "second": obj.second,
             "microsecond": obj.microsecond,
-            "tzinfo": self.context.flatten(obj.tzinfo)
+            "tzinfo": self.context.flatten(obj.tzinfo, reset=False)
         }
     
     def restore(self, obj):
@@ -143,7 +143,7 @@ class ConditionHandler(BaseHandler):
     def flatten(self, obj, data):
         return {
             "py/object": "threading.Condition",
-            "locked": self.context.flatten(obj._lock),
+            "locked": self.context.flatten(obj._lock, reset=False),
         }
     
     def restore(self, obj):
