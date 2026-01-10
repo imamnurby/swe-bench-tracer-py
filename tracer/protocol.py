@@ -214,6 +214,11 @@ class LineEvent(Event):
                 del obj.seen_variables['doctree']['py/state']['settings']['env']['py/state']['all_docs']['index']
             except KeyError:
                 pass
+        elif self.function_name.endswith("DefaultSubstitutions.apply"):
+            obj = self.model_copy()
+            if "to_handle" in obj.seen_variables:
+                if isinstance(obj.seen_variables["to_handle"], list):
+                    obj.seen_variables["to_handle"] = sorted(obj.seen_variables["to_handle"])
         else:
             obj = self
         if obj.seen_variables:
