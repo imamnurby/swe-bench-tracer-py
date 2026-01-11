@@ -124,7 +124,10 @@ class ReturnEvent(Event):
     return_value: Any
 
     def dump(self):
-        copied = self.model_copy(update={"return_value": drop_numeric_keys(self.return_value)})
+        copied = self.model_copy()
+        if copied.return_value:
+            copied.return_value = drop_numeric_keys(copied.return_value)
+            copied.return_value = sanitize_seen_variables(copied.return_value)
         return copied.model_dump(exclude={
             "event_id", "event_type", "line_number", "statement", "excluded",
             "vars_used", "caller_name",
@@ -217,6 +220,13 @@ class LineEvent(Event):
                     var = obj.seen_variables["e"]['py/reduce'][1]['py/tuple'][0]
                     if isinstance(var, str):
                         obj.seen_variables["e"]['py/reduce'][1]['py/tuple'][0] = sanitize_exc_msg(var)
+                except KeyError:
+                    pass
+            if "value" in obj.seen_variables:
+                try:
+                    var = obj.seen_variables["value"]['py/reduce'][1]['py/tuple'][0]
+                    if isinstance(var, str):
+                        obj.seen_variables["value"]['py/reduce'][1]['py/tuple'][0] = sanitize_exc_msg(var)
                 except KeyError:
                     pass
         elif self.function_name.endswith("test_mark_mro"):
