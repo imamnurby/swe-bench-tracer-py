@@ -19,6 +19,18 @@ def sanitize_exc_msg(value: str) -> str:
     value = TIMESTAMP_PATTERN.sub("<timestamp>", value)
     return value
 
+def sanitize_seen_variables(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        cleaned: Dict[Any, Any] = {}
+        for key, value in obj.items():
+            cleaned[key] = sanitize_seen_variables(value)
+        return cleaned
+    if isinstance(obj, list):
+        return [sanitize_seen_variables(item) for item in obj]
+    if isinstance(obj, tuple):
+        return tuple(sanitize_seen_variables(item) for item in obj)
+    return obj
+
 def _is_pure_number_key(key: Any) -> bool:
     if isinstance(key, int):
         return True
@@ -247,6 +259,7 @@ class LineEvent(Event):
         if obj.seen_variables:
             obj.seen_variables = drop_numeric_keys(obj.seen_variables)
             obj.seen_variables = scrub_py_state(obj.seen_variables)
+            obj.seen_variables = sanitize_seen_variables(obj.seen_variables)
         return obj.model_dump(exclude={
             "event_id", "event_type", "line_number", "statement", "excluded",
             "vars_defined", "vars_used",
