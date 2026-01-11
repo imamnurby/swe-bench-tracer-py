@@ -20,6 +20,9 @@ def sanitize_exc_msg(value: str) -> str:
     return value
 
 def sanitize_seen_variables(obj: Any) -> Any:
+    def _strip_address(match: re.Match) -> str:
+        return f"<{match.group('object')}>"
+    
     if isinstance(obj, dict):
         cleaned: Dict[Any, Any] = {}
         for key, value in obj.items():
@@ -27,8 +30,9 @@ def sanitize_seen_variables(obj: Any) -> Any:
         return cleaned
     if isinstance(obj, list):
         return [sanitize_seen_variables(item) for item in obj]
-    if isinstance(obj, tuple):
-        return tuple(sanitize_seen_variables(item) for item in obj)
+    if isinstance(obj, str):
+        if obj.startswith("<") and obj.endswith(">"): # short-circuit to speed up
+            return REPR_PATTERN.sub(_strip_address, obj)
     return obj
 
 def _is_pure_number_key(key: Any) -> bool:
