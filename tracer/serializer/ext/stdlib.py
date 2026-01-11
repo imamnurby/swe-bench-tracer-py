@@ -8,6 +8,9 @@ import datetime
 import threading
 
 from jsonpickle.handlers import BaseHandler, register
+from tracer.serializer.ext.common import (
+    PlainHandler,
+)
 
 class IteratorHandler(BaseHandler):
     def flatten(self, obj, data):
@@ -175,9 +178,10 @@ def register_handlers():
     register(datetime.time, TimeHandler)
     register(threading.Condition, ConditionHandler)
     register(asyncio.Future, FutureHandler)
+    register(threading.Thread, PlainHandler)
     return [
         type(iter([])), types.GeneratorType, io.IOBase,
         io.TextIOWrapper, socket.socket, decimal.Decimal, property,
         uuid.UUID, datetime.datetime, datetime.date, datetime.time,
-        threading.Condition, asyncio.Future,
+        threading.Condition, asyncio.Future, threading.Thread,
     ]
