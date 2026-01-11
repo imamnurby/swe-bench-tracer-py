@@ -62,6 +62,43 @@ REGISTERED_EXT_CLS_TYPES = register_type_handlers()
 PICKLER = jsonpickle.Pickler(warn=True, make_refs=False, max_depth=20)
 UNPICKLER = jsonpickle.Unpickler()
 
+def pickler_flatten_obj_monkey_patch(self):
+    from jsonpickle.pickler import _in_cycle
+    from tracer.serializer.ext.common import canonical_class_name
+    
+    def sanitized_repr(obj):
+        return {"py/object": canonical_class_name(obj)}
+        
+    def _flatten_obj(obj):
+        self._seen.append(obj)
+
+        max_reached = self._max_reached()
+
+        try:
+            in_cycle = _in_cycle(obj, self._objs, max_reached, self.make_refs)
+            if in_cycle:
+                # break the cycle
+                flatten_func = sanitized_repr
+            else:
+                flatten_func = self._get_flattener(obj)
+
+            if flatten_func is None:
+                self._pickle_warning(obj)
+                return None
+
+            return flatten_func(obj)
+
+        except (KeyboardInterrupt, SystemExit) as e:
+            raise e
+        except Exception as e:
+            if self.fail_safe is None:
+                raise e
+            else:
+                return self.fail_safe(e)
+    return _flatten_obj
+
+PICKLER._flatten_obj = pickler_flatten_obj_monkey_patch(PICKLER)
+
 def pickler_flatten_function_monkey_patch(self):
     def _flatten_function(obj):
         if self.unpicklable:
